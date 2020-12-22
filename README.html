@@ -5,7 +5,8 @@
         <title>1&period; Bundled References</title>
         <style>
 </style>
-        
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.2/dist/katex.min.css" integrity="sha384-yFRtMMDnQtDRO8rLpMIKrtPCD5jdktao2TV19YiZYWMDkUR5GQZR/NOVTdquEx1j" crossorigin="anonymous">
+<link href="https://cdn.jsdelivr.net/npm/katex-copytex@latest/dist/katex-copytex.min.css" rel="stylesheet" type="text/css">
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Microsoft/vscode/extensions/markdown-language-features/media/markdown.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Microsoft/vscode/extensions/markdown-language-features/media/highlight.css">
 <style>
@@ -19,7 +20,7 @@
 .task-list-item { list-style-type: none; } .task-list-item-checkbox { margin-left: -20px; vertical-align: middle; }
 </style>
         
-        
+        <script src="https://cdn.jsdelivr.net/npm/katex-copytex@latest/dist/katex-copytex.min.js"></script>
         
     </head>
     <body class="vscode-body vscode-light">
@@ -50,10 +51,10 @@
 <p><strong>C++ Libraries:</strong></p>
 <ul>
 <li>libnuma (e.g., <code>sudo apt install libnuma-dev</code>)</li>
-<li>libjemalloc (included in 'lib')</li>
+<li>libjemalloc (e.g., <code>sudo apt install libjemalloc-dev</code>)</li>
 </ul>
-<p>Most likely, <strong>it is necessary to replace the jemalloc library</strong> contained in the <code>lib</code> folder.
-To do so, install the correct version to your system then copy the shared library to <code>lib</code> so that the scripts can locate it.
+<p>After installing jemalloc, <strong>it is necessary to replace the jemalloc library</strong> contained in the <code>lib</code> folder.
+To do so, simply copy the shared library to <code>lib</code> so that the scripts can locate it.
 Otherwise, update line 82 in <code>microbench/runscript.sh</code> and line 73 in <code>macrobench/runscript.sh</code> to point to the location of the library.</p>
 <p><strong>Python libraries:</strong></p>
 <ul>
@@ -83,7 +84,12 @@ There are five configuration parameters.</p>
 <li>
 <p>The easiest way to determine both <code>cpu_freq_ghz</code> and <code>pinning_policy</code> is to execute <code>lspci</code> on the command line. The first is directly used from the line indicating CPU frequency. The latter is a comma separated list of the NUMA node mappings. Consider a hypothetical machine with NUMA zones of four cores each that has the folling mappings: <code>NUMA 0: 1,3,5,7</code> and <code>NUMA 1: 0,2,4,6</code>. The pinning policy that mimics our setup would then be <code>pinning_policy=&quot;-bind 1,3,5,7,0,2,4,6</code>. If <code>pinning_policy</code> is left blank then no specific policy is used.</p>
 </li>
+<li>
+<p>The following command will extract the cores associated with each NUMA zone and make a comman deliminated list that follows our pinning policy of filling NUMA zones. The output can then be copy and pasted into <code>config.mk</code>.</p>
+</li>
 </ol>
+<pre><code><code><div>lscpu | grep -P &quot;NUMA node[[:digit:]]&quot; | sed -E 's/.*:\W*([0-9]*)/\1/g' | tr '\n' ',' | sed 's/,$/\n/g' | xargs echo &quot;-bind&quot;
+</div></code></code></pre>
 <h2 id="d-building-the-project">d. Building the Project</h2>
 <p>Once configured, build the binaries for each of the data structures and range query techniques with the following:</p>
 <pre><code><code><div>cd microbench
@@ -91,9 +97,9 @@ make -j lazylist skiplistlock citrus rlu lbundle unsafe
 </div></code></code></pre>
 <p>The first three arguments to the <code>make</code> command (i.e., <code>lazylist</code>, <code>skiplistlock</code>, <code>citrus</code>) build the EBR-based approach from Arbel-Raviv and Brown. The next argument (i.e., <code>rlu</code>) builds the RLU-based lazy-list and Citrus tree. The fifth argument (i.e., <code>lbundle</code>) builds the bundled lazy-list, optimistic skip-list and Citrus tree. Finally, the last argument (i.e., unsafe) builds the three data structures of interest with no instrumentation for range queries. Unlike the unsafe implementation provided by Arbel-Raviv and Brown, our implementation does not reclaim memory. We chose to do this because the RLU-based data structures do not utilize epoch-based memory reclamation. As such, our unsafe versions are an upper bound on all range query techniques and provides a more general reference.</p>
 <h2 id="e-running-individual-experiments">e. Running Individual Experiments</h2>
-<p>Finally, run individual tests to obtain results for a given configuration. The following command runs a workload of 5% inserts (<code>-i 5</code>), 5% deletes (<code>-d 5</code>), 80% gets and 10% range queries (<code>-rq 10</code>) on a key range of 100000 (<code>-k 100000</code>). Each range query has a range of 50 keys (<code>-rqsize 50</code>) and is prefilled (<code>-p</code>) based on the ratio of inserts and deletes. The execution lasts for 1s (<code>-t 1000</code>). There are no dedicated range query threads (<code>-nrq 0</code>) but there are a total of 8 worker threads (<code>-nwork 8</code>) and they are bound to cores following the bind policy (<code>-bind 0-7,16-23,8-15,24-31</code>). Do not forget to load jemalloc.</p>
+<p>Finally, run individual tests to obtain results for a given configuration. The following command runs a workload of 5% inserts (<code>-i 5</code>), 5% deletes (<code>-d 5</code>), 80% gets and 10% range queries (<code>-rq 10</code>) on a key range of 100000 (<code>-k 100000</code>). Each range query has a range of 50 keys (<code>-rqsize 50</code>) and is prefilled (<code>-p</code>) based on the ratio of inserts and deletes. The execution lasts for 1s (<code>-t 1000</code>). There are no dedicated range query threads (<code>-nrq 0</code>) but there are a total of 8 worker threads (<code>-nwork 8</code>) and they are bound to cores following the bind policy (<code>-bind 0-7,16-23,8-15,24-31</code>). Do not forget to load jemalloc and replace <code>&lt;hostname&gt;</code> with the correct value.</p>
 <pre><code><code><div>env LD_PRELOAD=../lib/libjemalloc.so TREE_MALLOC=../lib/libjemalloc.so \ 
-./hostname.skiplistlock.rq_lbundle.out -i 5 -d 5 -k 100000 -rq 10 \ 
+./&lt;hostname&gt;.skiplistlock.rq_lbundle.out -i 5 -d 5 -k 100000 -rq 10 \ 
 -rqsize 50 -p -t 1000 -nrq 0 -nwork 8 -bind 0-7,16-23,8-15,24-31
 </div></code></code></pre>
 <p>For more information on the input parameters to the microbenchmark itself see README.txt.old, which was written for the original implementation. We did not change any arguments.</p>
@@ -124,11 +130,12 @@ python plot.py --save_plots --microbench
 <p><code>experiment_list_generate.sh</code> includes two experiments. The first, saved under <code>microbench/data/workloads</code> fixes the range query size to 50 and tests various workload configurations. This corresponds to Figure 2 in the paper as well as additional experiments for get-only and update-only workloads. The second, whose results will be written to <code>microbench/data/rq_sizes</code>, executes a 50%-50% update-rq workload at various range query lengths (i.e., 1, 5, 10, 50, 100, 500). This corresponds to Figure 3.</p>
 <p><strong>WARNING</strong>: The experiments can take a long time to run because there are many competitors. As was used for our results, have preconfigured the run to execute three trials, run for 3s, and test the optimistic skip-list and Citrus tree. Both <code>runscript.sh</code> and <code>experiment_list_generate.sh</code> contain some addtional configuration options, but <em>they are not required</em>.</p>
 <ul>
-<li><code>runscript.sh</code> contains some additional configuration, that if so desired may be updated. Specifically, lines 9 and 36 are pertinent as they adjust the number of trials per-configuration and the length of each trial. If you do not wish to wait as long for the experiments to terminate, you may adjust these values knowing that the results may differ from those presented in the paper.</li>
+<li><code>runscript.sh</code> defines the length of experiments. Specifically, lines 9 and 36 are pertinent as they adjust the number of trials per-configuration and the length of each trial. If you do not wish to wait as long for the experiments to terminate, you may adjust these values knowing that the results may differ from those presented in the paper.</li>
 <li><code>experiment_list_generate.sh</code> contains some other configuration options. The current configuration is an abridged version, which limits the nubmer of overall tests to run for the sake of time. Lines 16-18 indicate which competitors to test (<code>rqtechniques</code>), which data structures to run them on (<code>datastructures</code>), and the key ranges to use (<code>ksizes</code>).</li>
 </ul>
 <p><strong>Output</strong></p>
 <p>As stated previously, the microbenchmark saves data under <code>./microbench/data</code>. This raw data is used by the plotting script, but is first translated to a .csv file that is also stored in the subdirectory corresponding to each experiment in <code>experiment_list_generate.sh</code>. Upon running <code>plot.py</code> with the argument <code>--save_plots</code>, the generated graphs will be stored in <code>./figures</code> (again, in the corresponding subdirectories).</p>
+<p>To further support the figures, there is also output generated to the console that prints the speedup of each competitor over the &quot;unsafe&quot; version. This can be used to analyze the results portrayed in Figure 2 as relative to the theoretical maximum.</p>
 <h2 id="b-macrobenchmark">b. Macrobenchmark</h2>
 <p>In addition to demonstrating better performance in mixed workloads, we also demonstrate improvements over competitors in index performance when integrated into a database. This can be observed by running the macrobenchmark.</p>
 <p>To build and run the DBx1000 integration, run the following from the root directory:</p>

@@ -42,10 +42,10 @@ The experiments from the paper were executed on a 4-socket machine with Intel Xe
 
 **C++ Libraries:**
 + libnuma (e.g., `sudo apt install libnuma-dev`)
-+ libjemalloc (to be included in 'lib')
++ libjemalloc (e.g., `sudo apt install libjemalloc-dev`)
 
-Most likely, **it is necessary to replace the jemalloc library** contained in the `lib` folder. 
-To do so, install the correct version to your system then copy the shared library to `lib` so that the scripts can locate it.
+After installing jemalloc, **it is necessary to replace the jemalloc library** contained in the `lib` folder. 
+To do so, simply copy the shared library to `lib` so that the scripts can locate it.
 Otherwise, update line 82 in `microbench/runscript.sh` and line 73 in `macrobench/runscript.sh` to point to the location of the library.
 
 **Python libraries:**
@@ -70,11 +70,18 @@ There are five configuration parameters.
 + `cpu_freq_ghz` is the system's CPU frequency in GHz
 + `pinning_policy` is a string that starts with "-bind " (or left blank) and maps threads to cores during execution
 
+
 **Configuration Tips**
 
 1) Together, `maxthreads` and `threadincrement` determine the number of samples generated during experiments. For example, on a 44 core machine with `maxthreads=44` and `threadincrement=8` the resulting numbers of threads tested will be [1, 8, 16, 32, 40, 44]. Both 1 and `maxthreads` are always included, regardless of whether `maxthreads` is a multiple of `threadincrement`.
 
 2) The easiest way to determine both `cpu_freq_ghz` and `pinning_policy` is to execute `lspci` on the command line. The first is directly used from the line indicating CPU frequency. The latter is a comma separated list of the NUMA node mappings. Consider a hypothetical machine with NUMA zones of four cores each that has the folling mappings: `NUMA 0: 1,3,5,7` and `NUMA 1: 0,2,4,6`. The pinning policy that mimics our setup would then be `pinning_policy="-bind 1,3,5,7,0,2,4,6`. If `pinning_policy` is left blank then no specific policy is used.
+
+3) The following command will extract the cores associated with each NUMA zone and make a comman deliminated list that follows our pinning policy of filling NUMA zones. The output can then be copy and pasted into `config.mk`.
+
+```
+lscpu | grep -P "NUMA node[[:digit:]]" | sed -E 's/.*:\W*([0-9]*)/\1/g' | tr '\n' ',' | sed 's/,$/\n/g' | xargs echo "-bind"
+```
 
 ## d. Building the Project
 
@@ -89,11 +96,11 @@ The first three arguments to the `make` command (i.e., `lazylist`, `skiplistlock
 
 ## e. Running Individual Experiments
 
-Finally, run individual tests to obtain results for a given configuration. The following command runs a workload of 5% inserts (`-i 5`), 5% deletes (`-d 5`), 80% gets and 10% range queries (`-rq 10`) on a key range of 100000 (`-k 100000`). Each range query has a range of 50 keys (`-rqsize 50`) and is prefilled (`-p`) based on the ratio of inserts and deletes. The execution lasts for 1s (`-t 1000`). There are no dedicated range query threads (`-nrq 0`) but there are a total of 8 worker threads (`-nwork 8`) and they are bound to cores following the bind policy (`-bind 0-7,16-23,8-15,24-31`). Do not forget to load jemalloc.
+Finally, run individual tests to obtain results for a given configuration. The following command runs a workload of 5% inserts (`-i 5`), 5% deletes (`-d 5`), 80% gets and 10% range queries (`-rq 10`) on a key range of 100000 (`-k 100000`). Each range query has a range of 50 keys (`-rqsize 50`) and is prefilled (`-p`) based on the ratio of inserts and deletes. The execution lasts for 1s (`-t 1000`). There are no dedicated range query threads (`-nrq 0`) but there are a total of 8 worker threads (`-nwork 8`) and they are bound to cores following the bind policy (`-bind 0-7,16-23,8-15,24-31`). Do not forget to load jemalloc and replace `<hostname>` with the correct value.
 
 ```
 env LD_PRELOAD=../lib/libjemalloc.so TREE_MALLOC=../lib/libjemalloc.so \ 
-./hostname.skiplistlock.rq_lbundle.out -i 5 -d 5 -k 100000 -rq 10 \ 
+./<hostname>.skiplistlock.rq_lbundle.out -i 5 -d 5 -k 100000 -rq 10 \ 
 -rqsize 50 -p -t 1000 -nrq 0 -nwork 8 -bind 0-7,16-23,8-15,24-31
 ```
 
