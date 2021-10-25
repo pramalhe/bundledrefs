@@ -1,9 +1,9 @@
 include ../config.mk
 PLAF = -DLOGICAL_PROCESSORS=$(maxthreads_powerof2) -DMAX_TID_POW2=$(maxthreads_powerof2) -DCPU_FREQ_GHZ=$(cpu_freq_ghz) -DCPU_FREQ=$(cpu_freq_ghz)
 
-GPP = g++
+GPP = g++-9
 FLAGS = -std=c++11 -mcx16 
-FLAGS += -O3
+FLAGS += -O2
 # FLAGS += -O0 -fsanitize=address -static-libasan -fsanitize=leak
 FLAGS += -g
 FLAGS += -DNDEBUG
@@ -84,7 +84,14 @@ LDFLAGS += -lpapi
 
 machine=$(shell hostname)
 
-all: abtree bslack bst lazylist lflist citrus rlu skiplistlock lbundle ubundle
+#all: abtree bslack bst lazylist lflist citrus rlu skiplistlock lbundle ubundle
+all: lazylist lflist citrus rlu skiplistlock lbundle ubundle mvccvbr
+
+.PHONY: mvccvbr
+mvccvbr: direct_cts.rq_mvccvbr
+
+direct_cts.rq_mvccvbr:
+	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRQ_MVCC_VBR $(pinning) $(thispath)main.cpp $(LDFLAGS)
 
 .PHONY: lbundle
 lbundle: citrus.rq_lbundle skiplistlock.rq_lbundle lazylist.rq_lbundle bst.rq_lbundle
