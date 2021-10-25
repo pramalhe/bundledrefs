@@ -9,7 +9,7 @@
     // define BEFORE including rq_provider.h
     #define MAX_NODES_INSERTED_OR_DELETED_ATOMICALLY 4
 #endif
-#include "rq_provider.h"
+//#include "rq_provider.h"
 
 template <typename K, typename V>
 class node_t;
@@ -71,9 +71,9 @@ public:
         ss<<getSizeInNodes()<<" nodes in data structure";
         return ss.str();
     }
-    RecManager * debugGetRecMgr() {
-        return recordmgr;
-    }
+    //RecManager * debugGetRecMgr() {
+    //    return recordmgr;
+    //}
     
     inline int getKeys(const int tid, node_t<K,V> * node, K * const outputKeys, V * const outputValues){
         //ignore marked

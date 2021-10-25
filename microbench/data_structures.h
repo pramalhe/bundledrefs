@@ -584,6 +584,37 @@ using namespace vcas_bst_ns;
 #define PRINT_OBJ_SIZES                                          \
   cout << "sizes: node=" << (sizeof(Node<test_type, test_type>)) \
        << " descriptor=" << (sizeof(SCXRecord<test_type, test_type>)) << endl;
+
+/*--------------------------------------------------------------------------*/
+#elif defined(RQ_MVCC_VBR)
+//#include "record_manager.h"
+#include "mvccvbr/dummy_list.h"
+//using namespace mvcc_vbr;
+
+#define DS_DECLARATION \
+	  dummylist<test_type, test_type>
+#define MEMMGMT_T \
+	  record_manager<RECLAIM, ALLOC, POOL, Node<test_type, test_type>>
+#define DS_CONSTRUCTOR \
+	  new DS_DECLARATION(KEY_MAX, NO_VALUE, TOTAL_THREADS, SIGQUIT)
+
+#define INSERT_AND_CHECK_SUCCESS \
+	  ds->INSERT_FUNC(tid, key, VALUE) == ds->NO_VALUE
+#define DELETE_AND_CHECK_SUCCESS ds->ERASE_FUNC(tid, key).second
+#define FIND_AND_CHECK_SUCCESS ds->FIND_FUNC(tid, key)
+#define RQ_AND_CHECK_SUCCESS(rqcnt)                               \
+	  (rqcnt) = ds->RQ_FUNC(tid, key, key + RQSIZE - 1, rqResultKeys, \
+			                          (VALUE_TYPE *)rqResultValues)
+#define RQ_GARBAGE(rqcnt) rqResultKeys[0] + rqResultKeys[(rqcnt)-1]
+#define INIT_THREAD(tid) ds->initThread(tid)
+#define DEINIT_THREAD(tid) ds->deinitThread(tid)
+#define INIT_ALL
+#define DEINIT_ALL
+
+#define PRINT_OBJ_SIZES                                          \
+	  cout << "sizes: node=" << (sizeof(Node<test_type, test_type>)) \
+       << " descriptor=" << (sizeof(SCXRecord<test_type, test_type>)) << endl;
+
 #else
 #error "Failed to define a data structure"
 #endif
