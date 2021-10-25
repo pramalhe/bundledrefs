@@ -15,13 +15,23 @@ template <typename K, typename V>
 class node_t;
 #define nodeptr node_t<K,V> *
 
+template <typename K, typename V>
+class node_t {
+public:
+    K key;
+    std::atomic<V> val;
+    std::atomic<node_t*> next;
+
+};
+
 #ifndef casword_t
 #define casword_t intptr_t
 #endif
 
-template <typename K, typename V>
+template <typename K, typename V, class RecManager>
 class dummylist {
 private:
+    RecManager * const recmgr;
     //RQProvider<K, V, node_t<K,V>, lflist<K,V,RecManager>, RecManager, true, true> * rqProvider;
 #ifdef USE_DEBUGCOUNTERS
     debugCounters * const counters;
@@ -71,9 +81,9 @@ public:
         ss<<getSizeInNodes()<<" nodes in data structure";
         return ss.str();
     }
-    //RecManager * debugGetRecMgr() {
-    //    return recordmgr;
-    //}
+    RecManager * debugGetRecMgr() {
+        return recmgr;
+    }
     
     inline int getKeys(const int tid, node_t<K,V> * node, K * const outputKeys, V * const outputValues){
         //ignore marked
