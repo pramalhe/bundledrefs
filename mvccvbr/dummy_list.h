@@ -21,7 +21,6 @@ public:
     K key;
     std::atomic<V> val;
     std::atomic<node_t*> next;
-
 };
 
 #ifndef casword_t
@@ -31,7 +30,7 @@ public:
 template <typename K, typename V, class RecManager>
 class dummylist {
 private:
-    RecManager * const recmgr;
+    RecManager * const recmgr = nullptr;
     //RQProvider<K, V, node_t<K,V>, lflist<K,V,RecManager>, RecManager, true, true> * rqProvider;
 #ifdef USE_DEBUGCOUNTERS
     debugCounters * const counters;
@@ -49,13 +48,39 @@ public:
     const K KEY_MIN;
     const K KEY_MAX;
     const V NO_VALUE;
-    dummylist(int numProcesses, const K KEY_MIN, const K KEY_MAX, const V NO_VALUE);
-    ~dummylist();
-    bool contains(const int tid, const K& key);
-    V insert(const int tid, const K& key, const V& value);
-    V insertIfAbsent(const int tid, const K& key, const V& value);
-    V erase(const int tid, const K& key);
-    int rangeQuery(const int tid, const K& lo, const K& hi, K * const resultKeys, V * const resultValues);
+
+    dummylist(int numProcesses, const K key_min, const K key_max, const V no_value) : KEY_MIN{key_min}, KEY_MAX{key_max}, NO_VALUE{no_value} {
+        head = nullptr;
+    }
+
+    ~dummylist() {
+
+    }
+
+    bool contains(const int tid, const K& key) {
+        printf("contains(%d)\n", tid);
+        return true;
+    }
+
+    V insert(const int tid, const K& key, const V& value) {
+        printf("insert(%d)\n", tid);
+        return NO_VALUE;
+    }
+
+    V insertIfAbsent(const int tid, const K& key, const V& value) {
+        printf("insertIfAbsent(%d)\n", tid);
+        return NO_VALUE;
+    }
+
+    V erase(const int tid, const K& key) {
+        printf("erase(%d)\n", tid);
+        return NO_VALUE;
+    }
+
+    int rangeQuery(const int tid, const K& lo, const K& hi, K * const resultKeys, V * const resultValues) {
+        printf("rangeQuery(%d)\n", tid);
+        return 0;
+    }
     
     /**
      * This function must be called once by each thread that will
@@ -63,18 +88,33 @@ public:
      * 
      * It must be okay that we do this with the main thread and later with another thread!!!
      */
-    void initThread(const int tid);
-    void deinitThread(const int tid);
+    void initThread(const int tid) {
+
+    }
+
+    void deinitThread(const int tid) {
+
+    }
+
 #ifdef USE_DEBUGCOUNTERS
     debugCounters * debugGetCounters() { return counters; }
     void clearCounters() { counters->clear(); }
 #endif
-    long long debugKeySum();
+    long long debugKeySum() {
+        return 0;
+    }
+
 //    void validateRangeQueries(const long long prefillKeyChecksum) {
 //        rqProvider->validateRQs(prefillKeyChecksum);
 //    }
-    bool validate(const long long keysum, const bool checkkeysum);
-    long long getSize();
+    bool validate(const long long keysum, const bool checkkeysum) {
+        return false;
+    }
+
+    long long getSize() {
+        return 0;
+    }
+
     long long getSizeInNodes();
     string getSizeString() {
         stringstream ss;
@@ -102,5 +142,6 @@ public:
     }
 
     node_t<K,V> * debug_getEntryPoint() { return head; }
+
 };
 
