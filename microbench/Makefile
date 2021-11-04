@@ -1,7 +1,7 @@
 include ../config.mk
 PLAF = -DLOGICAL_PROCESSORS=$(maxthreads_powerof2) -DMAX_TID_POW2=$(maxthreads_powerof2) -DCPU_FREQ_GHZ=$(cpu_freq_ghz) -DCPU_FREQ=$(cpu_freq_ghz)
 
-GPP = g++-9
+GPP = g++
 FLAGS = -std=c++11 -mcx16 
 FLAGS += -O2
 # FLAGS += -O0 -fsanitize=address -static-libasan -fsanitize=leak
@@ -161,6 +161,11 @@ skiplistlock.rq_snapcollector:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DSKIPLISTLOCK -DRQ_SNAPCOLLECTOR $(pinning) $(thispath)main.cpp $(LDFLAGS)
 skiplistlock.rq_lbundle:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRQ_BUNDLE -DBUNDLE_LINKED_BUNDLE -DBUNDLE_SKIPLIST $(pinning) $(thispath)main.cpp $(LDFLAGS)
+ 
+.PHONY: lockfreeskiplist lockfreeskiplist.rq_unsafe
+lockfreeskiplist: lockfreeskiplist.rq_unsafe
+lockfreeskiplist.rq_unsafe:
+	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DLFSKIPLIST -DRQ_UNSAFE $(pinning) $(thispath)main.cpp $(LDFLAGS)
 
 .PHONY: bst bst.rq_lockfree bst.rq_rwlock bst.rq_htm_rwlock bst.rq_unsafe bst.rq_vcas bst.rq_lbundle
 bst: bst.rq_lockfree bst.rq_rwlock bst.rq_htm_rwlock bst.rq_unsafe bst.rq_vcas bst.rq_lbundle
