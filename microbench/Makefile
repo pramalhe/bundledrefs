@@ -71,6 +71,13 @@ LDFLAGS += -I../bundle_citrus
 LDFLAGS += -I../bundle_bst
 # -------------------------
 
+# vCAS specific includes
+LDFLAGS += -I../vcas_bst
+LDFLAGS += -I../vcas_lazylist
+LDFLAGS += -I../vcas_skiplist_lock
+LDFLAGS += -I../vcas_citrus
+# -------------------------
+
 # Unsafe specific includes.
 LDFLAGS += -I../unsafe/lazylist/
 LDFLAGS += -I../unsafe/skiplist_lock/
@@ -183,7 +190,7 @@ bst.rq_lbundle:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRQ_BUNDLE -DBUNDLE_LINKED_BUNDLE -DBUNDLE_BST $(pinning) $(thispath)main.cpp $(LDFLAGS)
 
 .PHONY: citrus citrus.rq_lockfree citrus.rq_rwlock citrus.rq_htm_rwlock citrus.rq_unsafe citrus.rq_lbundle
-citrus: citrus.rq_lockfree citrus.rq_rwlock citrus.rq_htm_rwlock citrus.rq_unsafe citrus.rq_lbundle
+citrus: citrus.rq_lockfree citrus.rq_rwlock citrus.rq_htm_rwlock citrus.rq_unsafe citrus.rq_lbundle citrus.rq_vcas
 citrus.rq_lockfree:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DCITRUS -DRQ_LOCKFREE $(pinning) $(thispath)main.cpp $(LDFLAGS)
 citrus.rq_rwlock:
@@ -194,6 +201,8 @@ citrus.rq_rwlock:
 # 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DCITRUS -DRQ_UNSAFE $(pinning) $(thispath)main.cpp $(LDFLAGS)
 citrus.rq_lbundle:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRQ_BUNDLE -DBUNDLE_LINKED_BUNDLE -DBUNDLE_CITRUS $(pinning) $(thispath)main.cpp $(LDFLAGS)
+citrus.rq_vcas:
+	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DVCAS_CITRUS -DRQ_VCAS $(pinning) $(thispath)main.cpp $(LDFLAGS)
 
 .PHONY: rlu lazylist.rq_rlu citrus.rq_rlu
 rlu: lazylist.rq_rlu citrus.rq_rlu
@@ -229,6 +238,17 @@ skiplistlock.rq_unsafe:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DUNSAFE_SKIPLIST $(pinning) $(thispath)main.cpp $(LDFLAGS)
 citrus.rq_unsafe:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DUNSAFE_CITRUS $(pinning) $(thispath)main.cpp $(LDFLAGS)
+
+.PHONY: vcas citrus.rq_vcas bst.rq_vcas skiplistlock.rq_vcas lazylist.rq_vcas
+vcas: citrus.rq_vcas bst.rq_vcas skiplistlock.rq_vcas lazylist.rq_vcas
+citrus.rq_vcas:
+	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DVCAS_CITRUS -DRQ_VCAS $(pinning) $(thispath)main.cpp $(LDFLAGS)
+bst.rq_vcas:
+	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DVCASBST -DRQ_VCAS $(pinning) $(thispath)main.cpp $(LDFLAGS)
+skiplistlock.rq_vcas:
+	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DVCAS_SKIPLIST -DRQ_VCAS $(pinning) $(thispath)main.cpp $(LDFLAGS)
+lazylist.rq_vcas:
+	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DVCAS_LAZYLIST -DRQ_VCAS $(pinning) $(thispath)main.cpp $(LDFLAGS)
 
 .PHONY: clean
 clean:
