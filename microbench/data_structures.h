@@ -147,8 +147,9 @@ using namespace bst_ns;
   cout << "sizes: node=" << (sizeof(node_t<test_type, test_type>)) << endl;
 
 #elif defined(LAZYLIST)
-#include "lazylist_impl.h"
 #include "record_manager.h"
+#include "lazylist_impl.h"
+
 
 #define DS_DECLARATION lazylist<test_type, test_type, MEMMGMT_T>
 #define MEMMGMT_T \
@@ -222,8 +223,9 @@ using namespace bst_ns;
     #define PRINT_OBJ_SIZES cout<<"sizes: node="<<(sizeof(node_t<test_type, test_type>)) RQ_SNAPCOLLECTOR_OBJ_SIZES<<endl;
 
 #elif defined(LFLIST)
-#include "lockfree_list_impl.h"
 #include "record_manager.h"
+#include "lockfree_list_impl.h"
+
 
 #define DS_DECLARATION lflist<test_type, test_type, MEMMGMT_T>
 #define MEMMGMT_T                      \
@@ -353,9 +355,10 @@ rlu_thread_data_t *rlu_tdata = NULL;
        << " including header=" << RLU_OBJ_HEADER_SIZE << endl;
 
 #elif defined(BUNDLE_LIST)
+#include "record_manager.h"
 #define BUNDLE_TYPE_DECL LinkedBundle
 #include "bundle_lazylist_impl.h"
-#include "record_manager.h"
+
 
 #define DS_DECLARATION bundle_lazylist<test_type, test_type, MEMMGMT_T>
 #define MEMMGMT_T \
@@ -651,6 +654,41 @@ using namespace vcas_citrus;
 #include "vcas_skiplist_lock_impl.h"
 
 using namespace vcas_skiplist_lock;
+
+#define DS_DECLARATION skiplist<test_type, test_type, MEMMGMT_T>
+#define MEMMGMT_T                      \
+  record_manager<RECLAIM, ALLOC, POOL, \
+                 node_t<test_type, test_type> RQ_SNAPCOLLECTOR_OBJECT_TYPES>
+#define DS_CONSTRUCTOR \
+  new DS_DECLARATION(TOTAL_THREADS, KEY_MIN, KEY_MAX, NO_VALUE, glob.rngs)
+
+#define INSERT_AND_CHECK_SUCCESS \
+  ds->INSERT_FUNC(tid, key, VALUE) == ds->NO_VALUE
+#define DELETE_AND_CHECK_SUCCESS ds->ERASE_FUNC(tid, key) != ds->NO_VALUE
+#define FIND_AND_CHECK_SUCCESS ds->FIND_FUNC(tid, key)
+#define RQ_AND_CHECK_SUCCESS(rqcnt)                              \
+  (rqcnt = ds->RQ_FUNC(tid, key, key + RQSIZE - 1, rqResultKeys, \
+                       (VALUE_TYPE *)rqResultValues))
+#define RQ_GARBAGE(rqcnt) rqResultKeys[0] + rqResultKeys[rqcnt - 1]
+#define INIT_THREAD(tid) ds->initThread(tid)
+#define DEINIT_THREAD(tid) ds->deinitThread(tid);
+#define INIT_ALL
+#define DEINIT_ALL
+
+#define PRINT_OBJ_SIZES                                                    \
+  cout << "sizes: node="                                                   \
+       << (sizeof(node_t<test_type, test_type>))RQ_SNAPCOLLECTOR_OBJ_SIZES \
+       << endl;
+
+/*--------------------------------------------------------------------------*/
+#elif defined(VCAS_LOCKFREE_SKIPLIST)
+
+#define NVCAS_OPTIMIZATION
+
+#include "record_manager.h"
+#include "vcas_lockfree_skiplist_impl.h"
+
+using namespace vcas_lockfree_skiplist;
 
 #define DS_DECLARATION skiplist<test_type, test_type, MEMMGMT_T>
 #define MEMMGMT_T                      \
