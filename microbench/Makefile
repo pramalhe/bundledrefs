@@ -77,6 +77,7 @@ LDFLAGS += -I../vcas_lazylist
 LDFLAGS += -I../vcas_skiplist_lock
 LDFLAGS += -I../vcas_citrus
 LDFLAGS += -I../vcas_lockfree_skiplist
+LDFLAGS += -I../vcas_lockfree_list
 # -------------------------
 
 # Unsafe specific includes.
@@ -146,8 +147,8 @@ lockfreeskiplist.rq_unsafe:
 bst: bst.rq_lockfree bst.rq_rwlock bst.rq_htm_rwlock bst.rq_unsafe bst.rq_vcas bst.rq_lbundle
 bst.rq_lockfree:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DBST -DRQ_LOCKFREE $(pinning) $(thispath)main.cpp $(LDFLAGS)
-bst.rq_rwlock:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(;ilesuffix).out $(xargs) -DBST -DRQ_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
+#bst.rq_rwlock:
+#	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(;ilesuffix).out $(xargs) -DBST -DRQ_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
 # bst.rq_htm_rwlock:
 # 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DBST -DRQ_HTM_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
 bst.rq_unsafe:
@@ -215,8 +216,8 @@ lflist.rq_lockfree:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DLFLIST -DRQ_LOCKFREE $(pinning) $(thispath)main.cpp $(LDFLAGS)
 
  
-.PHONY: vcas citrus.rq_vcas bst.rq_vcas skiplistlock.rq_vcas lazylist.rq_vcas lockfreeskiplist.rq_vcas
-vcas: citrus.rq_vcas bst.rq_vcas skiplistlock.rq_vcas lazylist.rq_vcas lockfreeskiplist.rq_vcas
+.PHONY: vcas citrus.rq_vcas bst.rq_vcas skiplistlock.rq_vcas lazylist.rq_vcas lockfreeskiplist.rq_vcas lockfreelist.rq_vcas
+vcas: citrus.rq_vcas bst.rq_vcas skiplistlock.rq_vcas lazylist.rq_vcas lockfreeskiplist.rq_vcas lockfreelist.rq_vcas
 #citrus.rq_vcas:
 #	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DVCAS_CITRUS -DRQ_VCAS $(pinning) $(thispath)main.cpp $(LDFLAGS)
 bst.rq_vcas:
@@ -227,6 +228,8 @@ bst.rq_vcas:
 #	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DVCAS_LAZYLIST -DRQ_VCAS $(pinning) $(thispath)main.cpp $(LDFLAGS)
 lockfreeskiplist.rq_vcas:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DVCAS_LOCKFREE_SKIPLIST -DRQ_VCAS $(pinning) $(thispath)main.cpp $(LDFLAGS)
+lockfreelist.rq_vcas:
+	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DVCAS_LOCKFREE_LIST -DRQ_VCAS $(pinning) $(thispath)main.cpp $(LDFLAGS)
 
 .PHONY: clean
 clean:

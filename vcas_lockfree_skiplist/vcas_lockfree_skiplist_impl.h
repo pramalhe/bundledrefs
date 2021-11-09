@@ -397,20 +397,17 @@ template <typename K, typename V, class RecManager>
 int skiplist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
                                            const K& hi, K* const resultKeys,
                                            V* const resultValues) {
-  //    cout<<"rangeQuery(lo="<<lo<<" hi="<<hi<<")"<<endl;
+
   recmgr->leaveQuiescentState(tid, true);
   int ts = rqProvider->traversal_start(tid);
   int cnt = 0;
-  // use the find function to find the low key
-  //    int nodesSkipped = 0;
-  //    int nodesVisited = 0;
   nodeptr pred = p_head;
   nodeptr curr = NULL;
   for (int level = SKIP_LIST_MAX_LEVEL - 1; level >= 0; level--) {
-    curr = rqProvider->read_vcas(tid, pred->p_next[level]);
+    curr = getUnmarked(rqProvider->read_vcas(tid, pred->p_next[level], ts));
     while (curr->key < lo) {
       pred = curr;
-      curr = rqProvider->read_vcas(tid, pred->p_next[level]);
+      curr = getUnmarked(rqProvider->read_vcas(tid, pred->p_next[level], ts));
       //            nodesSkipped++;
     }
   }
@@ -418,17 +415,12 @@ int skiplist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
   while (curr->key <= hi) {
     rqProvider->traversal_try_add(tid, curr, resultKeys, resultValues, &cnt, lo,
                                   hi, ts);
-    curr = rqProvider->read_vcas(tid, curr->p_next[0]);
-    //        nodesVisited++;
+    curr = getUnmarked(rqProvider->read_vcas(tid, curr->p_next[0]));
   }
-  //    cout<<"BEFORE END: rqSize="<<cnt<<" nodesSkipped="<<nodesSkipped<<"
-  //    nodesVisited="<<nodesVisited<<endl;
   rqProvider->traversal_end(tid, resultKeys, resultValues, &cnt, lo, hi);
 #ifdef SNAPCOLLECTOR_PRINT_RQS
   cout << "rqSize=" << cnt << endl;
 #endif
-  //    cout<<"AFTER END: rqSize="<<cnt<<" nodesSkipped="<<nodesSkipped<<"
-  //    nodesVisited="<<nodesVisited<<endl; cout<<endl;
 
   recmgr->enterQuiescentState(tid);
   return cnt;
