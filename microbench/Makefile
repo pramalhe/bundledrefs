@@ -80,6 +80,10 @@ LDFLAGS += -I../vcas_lockfree_skiplist
 LDFLAGS += -I../vcas_lockfree_list
 # -------------------------
 
+# mvccvbr specific includes
+LDFLAGS += -I../mvccvbr
+# -------------------------
+
 # Unsafe specific includes.
 LDFLAGS += -I../unsafe/lazylist/
 LDFLAGS += -I../unsafe/skiplist_lock/
@@ -97,9 +101,8 @@ machine=$(shell hostname)
 all: lazylist lflist citrus rlu skiplistlock lbundle ubundle mvccvbr
 
 .PHONY: mvccvbr
-mvccvbr: direct_cts.rq_mvccvbr
-
-direct_cts.rq_mvccvbr:
+mvccvbr: lockfreeskiplist.rq_mvccvbr
+lockfreeskiplist.rq_mvccvbr:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRQ_MVCC_VBR $(pinning) $(thispath)main.cpp $(LDFLAGS)
 
 .PHONY: lbundle

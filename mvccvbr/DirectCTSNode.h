@@ -68,8 +68,18 @@ class DirectCTSNode {
       return (bool)((uintptr_t)(tmp) & MARK_MASK);
     }
     
+    bool isMarkedPtr(DirectCTSNode *ptr) {
+      DirectCTSNode *tmp = ptr;     
+      return (bool)((uintptr_t)(tmp) & MARK_MASK);
+    }
+    
     bool isFlagged() {
       DirectCTSNode *tmp = next;
+      return (bool)((uintptr_t)(tmp) & FLAG_MASK);
+    }
+    
+    bool isFlaggedPtr(DirectCTSNode *ptr) {
+      DirectCTSNode *tmp = ptr;
       return (bool)((uintptr_t)(tmp) & FLAG_MASK);
     }
     
@@ -77,7 +87,7 @@ class DirectCTSNode {
       
       DirectCTSNode *succ = next;
       if (ts != expTS) return false;
-      if (isMarked() || isFlagged()) return false;
+      if (isMarkedPtr(succ) || isFlaggedPtr(succ)) return false;
       DirectCTSNode *flaggedSucc = (DirectCTSNode *)((uintptr_t)(succ) | FLAG_MASK);
       
       if(next.compare_exchange_strong(succ, flaggedSucc) == true) {

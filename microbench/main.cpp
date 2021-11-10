@@ -760,7 +760,7 @@ void printOutput() {
            << " dsKeySum=" << dsKeySum << endl;
     } else {
       cout << "Validation FAILURE: threadsKeySum = " << threadsKeySum
-           << " dsKeySum=" << dsKeySum << endl;
+           << " dsKeySum=" << dsKeySum << " ds size=" << ds->getSize() << endl;
       exit(-1);
     }
   }
