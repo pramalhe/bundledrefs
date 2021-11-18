@@ -211,10 +211,13 @@ void prefill(DS_DECLARATION *ds) {
 
   int sz = 0;
   int attempts;
+  cout << "Starting prefilling attempts" << endl;
   for (attempts = 0; attempts < MAX_ATTEMPTS; ++attempts) {
+    cout << "Attempt " << attempts << endl;
     INIT_ALL;
+    cout << "Finished initiating threads" << endl;
     DS_DECLARATION *ds = (DS_DECLARATION *)glob.__ds;
-
+    cout << "Finished declaring ds" << endl;
     // create threads
     pthread_t *threads = new pthread_t[TOTAL_THREADS];
     int *ids = new int[TOTAL_THREADS];
@@ -222,7 +225,7 @@ void prefill(DS_DECLARATION *ds) {
       ids[i] = i;
       glob.rngs[i * PREFETCH_SIZE_WORDS].setSeed(rand());
     }
-
+    cout << "Finished setting seeds" << endl;
     // start all threads
     for (int i = 0; i < TOTAL_THREADS; ++i) {
       if (pthread_create(&threads[i], NULL, thread_prefill, &ids[i])) {
@@ -230,7 +233,7 @@ void prefill(DS_DECLARATION *ds) {
         exit(-1);
       }
     }
-
+    cout << "Finished creating threads" << endl;
     TRACE COUTATOMIC(
         "main thread: waiting for threads to START prefilling running="
         << glob.running.load() << endl);
@@ -242,7 +245,7 @@ void prefill(DS_DECLARATION *ds) {
     glob.prefillIntervalElapsedMillis = 0;
     __sync_synchronize();
     glob.start = true;
-
+    cout << "start prefilling = true" << endl;
     /**
      * START INFINITE LOOP DETECTION CODE
      */
@@ -298,6 +301,8 @@ void prefill(DS_DECLARATION *ds) {
         exit(-1);
       }
     }
+    
+    cout << "Finished joining threads" << endl;
 
     delete[] threads;
     delete[] ids;
@@ -325,6 +330,9 @@ void prefill(DS_DECLARATION *ds) {
          << ". reached size " << sz << " after " << attempts << " attempts"
          << endl;
     exit(-1);
+  } else {
+    cout << "Prefilled to expected size (" << expectedSize << "). Reached size " << sz << " after " << attempts << " attempts."
+         << endl;
   }
 
   chrono::time_point<chrono::high_resolution_clock> prefillEndTime =
@@ -332,6 +340,8 @@ void prefill(DS_DECLARATION *ds) {
   auto elapsed = chrono::duration_cast<chrono::milliseconds>(prefillEndTime -
                                                              prefillStartTime)
                      .count();
+                     
+  cout << "Now printing GSTATS." << endl;
 
 #ifdef USE_DEBUGCOUNTERS
   debugCounters *const counters = GET_COUNTERS;
@@ -348,9 +358,13 @@ void prefill(DS_DECLARATION *ds) {
 #endif
 #ifdef USE_GSTATS
   GSTATS_PRINT;
+  cout << "Finished printing GSTATS." << endl;
   const long totalSuccUpdates =
       GSTATS_GET_STAT_METRICS(num_updates, TOTAL)[0].sum;
+  cout << "Calculated totalSuccUpdates: " << totalSuccUpdates << endl;
+  cout << "ds->debugKeySum: " << ds->debugKeySum() << ", ds->getSize: " << ds->getSize() << endl;
   glob.prefillKeySum = GSTATS_GET_STAT_METRICS(key_checksum, TOTAL)[0].sum;
+  cout << "Calculated prefillKeySum: " << glob.prefillKeySum << endl;
   COUTATOMIC("finished prefilling to size "
              << sz << " for expected size " << expectedSize
              << " keysum=" << glob.prefillKeySum

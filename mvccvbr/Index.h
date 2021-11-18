@@ -251,9 +251,13 @@ class Index
 
   public:
   
-    inline uint64_t getIndexEpoch(){
+    uint64_t getIndexEpoch(){
       return localIndexAllocator->getEpoch();
 	  }
+     
+    int getNumCaches() {
+      return globalIndexAllocator->getNumCaches();
+    }
      
 
   
@@ -263,11 +267,19 @@ class Index
         //initThread(0);
     }
     
+    ~Index() {
+      delete globalIndexAllocator;
+    }
+    
     void initThread(int tid) {
-      if (localIndexAllocator == nullptr)
+      if (localIndexAllocator == nullptr || localIndexAllocator->getGlobalAllocator() != globalIndexAllocator)
         localIndexAllocator = new LocalAllocator(globalIndexAllocator, tid);
       indexLevelSeed = tid + 3;
       currIndexEpoch = 0;
+    }
+    
+    void deinitThread(const int tid) {
+      localIndexAllocator->returnAllocCaches();
     }
     
     void init(DirectCTSNode<K,V> *head, DirectCTSNode<K,V> *tail) {

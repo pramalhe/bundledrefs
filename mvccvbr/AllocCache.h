@@ -77,6 +77,10 @@ class AllocCache {
     void setNext(AllocCache *allocCache) {
       next = allocCache;
     }
+    
+    void initMaxEpoch() {
+      maxEpoch = 0;
+    }
 
 
 } __attribute__((aligned((64))));

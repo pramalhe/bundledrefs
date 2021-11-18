@@ -1,9 +1,13 @@
-#ifndef MVCCVBR_SKIPLIST_H_
-#define MVCCVBR_SKIPLIST_H_
+#ifndef MVCCVBR_LIST_H_
+#define MVCCVBR_LIST_H_
 
 #pragma once
 #include "errors.h"
-#include "Index.h"
+#include <atomic>
+#include <iostream>
+
+#include "DirectCTSNode.h"
+#include "LocalAllocator.h"
 
 #ifndef MAX_NODES_INSERTED_OR_DELETED_ATOMICALLY
     // define BEFORE including rq_provider.h
@@ -11,18 +15,15 @@
 #endif
 
 
-__thread LocalAllocator *localAllocator = nullptr;
-__thread uint64_t currEpoch = 0;
+__thread LocalAllocator *localListAllocator = nullptr;
+__thread uint64_t currReclamationEpoch = 0;
 
-#define PADDING_BYTES 192
-#define PENDING_TS 1
-#define TS_CYCLE 2
-
-
-#define PENDING_MASK 0x1
+#define LIST_PADDING_BYTES 192
+#define LIST_TS_CYCLE 2
+#define LIST_PENDING_MASK 0x1
 
 template <typename K, typename V, class RecManager>
-class mvccvbr_skiplist {
+class mvccvbr_list {
 private:
     RecManager * const recmgr = nullptr;
     //RQProvider<K, V, node_t<K,V>, lflist<K,V,RecManager>, RecManager, true, true> * rqProvider;
@@ -31,11 +32,10 @@ private:
 #endif
     //nodeptr head;
     DirectCTSNode<K,V> *head;
-    Index<K,V> *index;
     Allocator *globalAllocator;
-    volatile char padding0[PADDING_BYTES];
+    volatile char padding0[LIST_PADDING_BYTES];
     std::atomic<uint64_t> tsEpoch;
-    volatile char padding1[PADDING_BYTES];
+    volatile char padding1[LIST_PADDING_BYTES];
     
 
     //nodeptr new_node(const int tid, const K& key, const V& val, nodeptr next);
@@ -56,7 +56,7 @@ private:
     //int init[MAX_TID_POW2] = {0,};
     
     inline uint64_t getReclamationEpoch(){
-      return localAllocator->getEpoch();
+      return localListAllocator->getEpoch();
 	  }
      
     inline uint64_t getTsEpoch(){
@@ -65,7 +65,7 @@ private:
      
     uint64_t incrementTsEpoch(uint64_t expEpoch){
       uint64_t tmp = expEpoch;
-      uint64_t newEpoch = expEpoch + TS_CYCLE;
+      uint64_t newEpoch = expEpoch + LIST_TS_CYCLE;
       if (tsEpoch.compare_exchange_strong(tmp, newEpoch, std::memory_order_acq_rel) == true)
         return newEpoch;
       return tmp; 
@@ -90,7 +90,7 @@ private:
     }
     
     inline bool isPending(uint64_t ts) {
-      return (ts & PENDING_MASK);
+      return (ts & LIST_PENDING_MASK);
     }
     
     inline uint64_t getSnapshotTs(uint64_t ts) {
@@ -110,7 +110,13 @@ private:
     inline bool isValidTS(uint64_t ts) {
       uint64_t shiftedEpoch = (ts & ~TS_MASK);
       uint64_t birthEpoch = (shiftedEpoch >> SNAPSHOT_EPOCH_BITS);
-      return (birthEpoch <= currEpoch);
+      return (birthEpoch <= currReclamationEpoch);
+    }
+    
+    inline uint64_t getReclamationEpochFromTs(uint64_t ts) {
+      uint64_t shiftedEpoch = (ts & ~TS_MASK);
+      uint64_t birthEpoch = (shiftedEpoch >> SNAPSHOT_EPOCH_BITS);
+      return birthEpoch;
     }
     
     inline uint64_t updateTS(DirectCTSNode<K,V> *ptr) {
@@ -128,11 +134,11 @@ private:
 
     
     inline bool isValidVersion(uint64_t version) {
-      return (version <= currEpoch);
+      return (version <= currReclamationEpoch);
     }
  
     inline void readGlobalReclamationEpoch() {   
-      currEpoch = getReclamationEpoch();
+      currReclamationEpoch = getReclamationEpoch();
     }
     
     inline bool mark(DirectCTSNode<K,V> *victim) {
@@ -150,13 +156,13 @@ private:
     
     inline void initDirectCTSNode(DirectCTSNode<K,V> *node, K key, V value, DirectCTSNode<K,V> *next, DirectCTSNode<K,V> *nextV) {
       readGlobalReclamationEpoch();
-      uint64_t shiftedReclamationEpoch = (currEpoch << SNAPSHOT_EPOCH_BITS);
-      uint64_t initTS = (shiftedReclamationEpoch | PENDING_MASK);
+      uint64_t shiftedReclamationEpoch = (currReclamationEpoch << SNAPSHOT_EPOCH_BITS);
+      uint64_t initTS = (shiftedReclamationEpoch | LIST_PENDING_MASK);
       node->ts.store(initTS);
       node->key = key;
       node->value = value;
-      node->nextV.store(integrateEpochIntoPointer(currEpoch, nextV)); 
-      node->next.store(integrateEpochIntoPointer(currEpoch, next));
+      node->nextV.store(integrateEpochIntoPointer(currReclamationEpoch, nextV)); 
+      node->next.store(integrateEpochIntoPointer(currReclamationEpoch, next));
 
     }
 
@@ -165,75 +171,101 @@ public:
     const K KEY_MAX;
     const V NO_VALUE;
 
-    mvccvbr_skiplist(int numProcesses, const K key_min, const K key_max, const V no_value) : KEY_MIN{key_min}, KEY_MAX{key_max}, NO_VALUE{no_value} {
+    mvccvbr_list(int numProcesses, const K key_min, const K key_max, const V no_value) : KEY_MIN{key_min}, KEY_MAX{key_max}, NO_VALUE{no_value} {
         head = nullptr;
         
         globalAllocator = new Allocator(sizeof(DirectCTSNode<K,V>), 2, numProcesses);
-        index = new Index<K,V>(numProcesses);
         initThread(0);
         
         tsEpoch = 2;
         
-        DirectCTSNode<K,V> *tail = (DirectCTSNode<K,V> *)localAllocator->alloc();
+        DirectCTSNode<K,V> *tail = (DirectCTSNode<K,V> *)localListAllocator->alloc();
         initDirectCTSNode(tail, KEY_MAX, NO_VALUE, nullptr, nullptr);
         updateTS(tail);
         
                        
-        head = (DirectCTSNode<K,V> *)localAllocator->alloc();
+        head = (DirectCTSNode<K,V> *)localListAllocator->alloc();
         initDirectCTSNode(head, KEY_MIN, NO_VALUE, tail, nullptr);
         updateTS(head);
-        
-        index->init(head, tail);
         
         incrementTsEpoch(2);
     }
 
-    ~mvccvbr_skiplist() {
-      cout << "DirectCTSNode size = " << sizeof(DirectCTSNode<K,V>) << endl;
-      cout << "IndexNode size = " << index->getNodeSize() << endl;
-      cout << "TS epoch = " << getTsEpoch() << endl;
-      cout << "Reclamation epoch = " << getReclamationEpoch() << endl;
-      cout << "Num caches = " << globalAllocator->getNumCaches() << endl;
-      cout << "Index reclamation epoch = " << index->getIndexEpoch() << endl;
-      cout << "Index num caches = " << index->getNumCaches() << endl;
-      delete globalAllocator;
-      delete index;
+    ~mvccvbr_list() {
+      cout<<"DirectCTSNode size = " << sizeof(DirectCTSNode<K,V>) << ". TS epoch = " << getTsEpoch() << ". Reclamation epoch = " << getReclamationEpoch() <<endl;
     }
     
   private:
   
-    DirectCTSNode<K,V> *readVersion(DirectCTSNode<K,V> *ptr, uint64_t snapshotTS) {
-      DirectCTSNode<K,V> *curr, *currNextV;
-      uint64_t currNextVVersion, currTS, currNextVTS;
-      curr = ptr;
-      currTS = curr->getTS();
-      if (isValidTS(currTS) == false)
+    DirectCTSNode<K,V> *readVersion(DirectCTSNode<K,V> *ptr, uint64_t snapshotTS, uint64_t expTS, uint64_t *outputExpTS) {
+      DirectCTSNode<K,V> *curr, *currNextV, *currNextVRaw, *pred, *predNextVRaw;
+      uint64_t predNextVVersion, currTS, currNextVTS, predTS;
+      
+      if (ptr == nullptr)
         return nullptr;
       
+      pred = ptr;
+      predNextVRaw = pred->nextV;
+      predNextVVersion = getVersion(predNextVRaw);
+      curr = getDirectCTSNode(predNextVRaw);
+      predTS = pred->getTS();
+      if (predTS != expTS || curr == nullptr)
+        return nullptr;
+        
+      currTS = curr->getTS();
+      if (isPending(currTS) || getReclamationEpochFromTs(currTS) > predNextVVersion)
+        return nullptr;
+        
       while (getSnapshotTs(currTS) > snapshotTS) {
-        currNextV = curr->getNextV();
-        currNextVTS = currNextV->getTS();
-        currNextVVersion = curr->getNextVVersion();
-        if (isValidVersion(currNextVVersion) == false || isValidTS(currNextVTS) == false)
-          return nullptr;
-        curr = currNextV;
-        currTS = currNextVTS;
+        pred = curr;
+        predNextVRaw = pred->nextV;
+        predNextVVersion = getVersion(predNextVRaw);        
+        curr = getDirectCTSNode(predNextVRaw);      
+        predTS = pred->getTS();
+        if (predTS != currTS || curr == nullptr)
+          return nullptr;        
+        
+        currTS = curr->getTS();
+        if (isPending(currTS) || getReclamationEpochFromTs(currTS) > predNextVVersion)
+          return nullptr;        
+   
       }
+      *outputExpTS = currTS;
       return curr;
     }
     
-    DirectCTSNode<K,V> *getNextV(DirectCTSNode<K,V> *ptr, uint64_t snapshotTS) {
+    DirectCTSNode<K,V> *getNextV(DirectCTSNode<K,V> *pred, uint64_t snapshotTS, uint64_t expPredTS, uint64_t *outputExpTS) {
       
-      DirectCTSNode<K,V> *pred, *curr, *currNextV;
-      uint64_t predVersion, currTS, tmp;
-      
-      pred = ptr;
-      curr = pred->getNext();
+      DirectCTSNode<K,V> *curr, *currNextV, *predNextRaw;
+      uint64_t predVersion, currTS, tmp, predTS, expCurrTS;
+      K predKey = pred->key, currKey;
+
+      predNextRaw = pred->next;
+      predVersion = getVersion(predNextRaw);
+      curr = getDirectCTSNode(predNextRaw);
+      predTS = pred->getTS();
+      if (curr == nullptr || predTS != expPredTS)
+        return nullptr;
+
       currTS = curr->getTS();
+      if (getReclamationEpochFromTs(currTS) > predVersion)
+        return nullptr;
       if (isPending(currTS)) {
-        if (isValidTS(updateTS(curr)) == false) return nullptr;
+        currTS = updateTS(curr);
+        return nullptr;
       }
-      return readVersion(curr, snapshotTS);
+      
+      if (getSnapshotTs(currTS) <= snapshotTS)
+        return curr;
+      curr = readVersion(curr, snapshotTS, currTS, &expCurrTS);
+      if (curr == nullptr)
+        return nullptr;
+      currKey = curr->key;
+      currTS = curr->getTS();
+      if (currTS != expCurrTS /*|| currKey <= predKey*/)
+        return nullptr;
+      *outputExpTS = expCurrTS;
+      return curr;
     }
     
     // all pointers are assumed to be unmarked and unflagged
@@ -261,8 +293,9 @@ public:
       }     
 
       if (isPending(succTS)) {
-        //readGlobalReclamationEpoch();
         succTS = updateTS(succ);
+        if (isValidTS(succTS) == false) 
+          return nullptr;
         if (pred->next != integrateEpochIntoPointer(predVersion, curr))
           return nullptr;
       }     
@@ -273,37 +306,33 @@ public:
       // preparing the new node
       // to be inserted instead of the flagged one
       succNext = succ->getNext();
-      DirectCTSNode<K,V> *succTag = (DirectCTSNode<K,V> *)localAllocator->alloc();
+      DirectCTSNode<K,V> *succTag = (DirectCTSNode<K,V> *)localListAllocator->alloc();
       initDirectCTSNode(succTag, succ->key, succ->value, succNext, curr);
       origNextV = succTag->nextV;
       
-      if (pred->updateNext(integrateEpochIntoPointer(predVersion, curr), integrateEpochIntoPointer(currEpoch, succTag))) {
-        updateEpoch = currEpoch;        
+      if (pred->updateNext(integrateEpochIntoPointer(predVersion, curr), integrateEpochIntoPointer(currReclamationEpoch, succTag))) {
+        updateEpoch = currReclamationEpoch;        
         succTagTS = updateTS(succTag);
         
-        currNextV = curr->getNextV();
-        if (getSnapshotTs(curr->getTS()) == getSnapshotTs(succTagTS)) {
-          optimizedNextV = integrateEpochIntoPointer(currEpoch, currNextV);
-          succTag->nextV.compare_exchange_strong(origNextV, optimizedNextV);
-        }
-        
-        if (isPending(succTagTS) == false) 
-          index->insert(succTag, succTagTS);
+        //currNextV = curr->getNextV();
+        //if (getSnapshotTs(curr->getTS()) == getSnapshotTs(succTagTS)) {
+          //optimizedNextV = integrateEpochIntoPointer(currReclamationEpoch, currNextV);
+          //succTag->nextV.compare_exchange_strong(origNextV, optimizedNextV);
+        //}
         
         deleted = curr;
         do {
           deletedNext = deleted->getNext();
-          index->remove(deleted->key);
-          localAllocator->retire(deleted);
+          localListAllocator->retire(deleted);
           deleted = deletedNext;
         } while (deleted != succ);
         
-        localAllocator->retire(succ);
+        localListAllocator->retire(succ);
         
         output = integrateEpochIntoPointer(updateEpoch, succTag);
         return output;
       } else {
-        localAllocator->returnAlloc(succTag);
+        localListAllocator->returnAlloc(succTag);
         return nullptr;
       }
 
@@ -316,18 +345,11 @@ public:
       DirectCTSNode<K,V> *tmp;
         
       try_again:
-        tmpKey = key;
+
         readGlobalReclamationEpoch();
 
-        do {
-          pred = index->findPred(tmpKey);
-          tmpKey = pred->key;
-          predNextRaw = pred->next;
-          if (isValidTS(pred->getTS()) == false) {
-            goto try_again;
-          }
-        } while (isMarked(predNextRaw) || isFlagged(predNextRaw));
-       
+        pred = head;
+        predNextRaw = pred->next;
         predNext = getDirectCTSNode(predNextRaw);
         version = getVersion(predNextRaw);
         curr = predNext;
@@ -423,25 +445,24 @@ public:
           return result;
         } 
         
-        DirectCTSNode<K,V> *newNode = (DirectCTSNode<K,V> *)localAllocator->alloc();
+        DirectCTSNode<K,V> *newNode = (DirectCTSNode<K,V> *)localListAllocator->alloc();
         initDirectCTSNode(newNode, key, value, curr, curr);
         initEpoch = newNode->ts;
         origNextV = newNode->nextV;
                  
-        if (pred->updateNext(integrateEpochIntoPointer(predVersion, curr), integrateEpochIntoPointer(currEpoch, newNode))) {
+        if (pred->updateNext(integrateEpochIntoPointer(predVersion, curr), integrateEpochIntoPointer(currReclamationEpoch, newNode))) {
           newNodeTS = updateTS(newNode);
-          if (isValidTS(newNodeTS) == true) {
-            if (getSnapshotTs(curr->getTS()) == getSnapshotTs(newNodeTS)) {
-              optimizedNextV = integrateEpochIntoPointer(currEpoch, curr->getNextV());
-              newNode->nextV.compare_exchange_strong(origNextV, optimizedNextV);
-            }
-            index->insert(newNode, newNodeTS);
-          }
+          //if (isValidTS(newNodeTS) == true) {
+            //if (getSnapshotTs(curr->getTS()) == getSnapshotTs(newNodeTS)) {
+              //optimizedNextV = integrateEpochIntoPointer(currReclamationEpoch, curr->getNextV());
+              //newNode->nextV.compare_exchange_strong(origNextV, optimizedNextV);
+            //}
+          //}
 
             
           return NO_VALUE;
         } else {
-          localAllocator->returnAlloc(newNode);
+          localListAllocator->returnAlloc(newNode);
         }
   
           
@@ -488,9 +509,9 @@ public:
     int rangeQuery(const int tid, const K& lo, const K& hi, K * const resultKeys, V * const resultValues) {	
     //intptr_t rangeQuery(intptr_t low, intptr_t high, int tid) {      
      
-      uint64_t predVersion, rangeQueryEpoch, minEpoch, predTS;
+      uint64_t predVersion, rangeQueryEpoch, minEpoch, predTS, currTS, outputExpTS;
       int count;
-      K predKey, currKey, tmpKey;
+      K predKey, currKey, tmpKey, prevKey;
       V currValue;
  	    DirectCTSNode<K,V> *pred, *curr;
   
@@ -514,14 +535,34 @@ public:
         curr = find(currKey, &pred, &predVersion, &tmpKey);
         
         predKey = pred->key;
+        predTS = pred->getTS();
         
-        pred = readVersion(pred, rangeQueryEpoch);
-        
-        if (pred == nullptr) {
-
+        if (isValidTS(predTS) == false) {
           currKey = lo;
           continue;
         }
+        
+        
+        if (getSnapshotTs(predTS) <= rangeQueryEpoch) {
+          curr = pred;
+          outputExpTS = predTS;
+        } else
+          curr = readVersion(pred, rangeQueryEpoch, predTS, &outputExpTS);
+        
+        if (curr == nullptr) {
+          currKey = lo;
+          continue;
+        }
+        
+        currTS = curr->getTS();
+        
+        if (pred->getTS() != predTS || currTS != outputExpTS) {
+          currKey = lo;
+          continue;
+        }
+        
+        pred = curr;
+        predTS = currTS;
         
         if (pred->key >= lo) {
 
@@ -529,24 +570,39 @@ public:
           continue;
         }
         
+        if (predTS != pred->getTS()) {
+          currKey = lo;
+          continue;
+        }
+        
+        
+        
         do {
-          curr = getNextV(pred, rangeQueryEpoch);
+          curr = getNextV(pred, rangeQueryEpoch, predTS, &outputExpTS);
           if (curr == nullptr) {
-
             currKey = lo;
-            break;            
+            break;
           }
+
           currKey = curr->key;  
           currValue = curr->value;
-          if (isValidTS(curr->getTS()) == false) {
-
+          currTS = curr->getTS();
+          
+          
+          if (pred->getTS() != predTS || currTS != outputExpTS) {
             currKey = lo;
-            break; 
-          }        
+            break;
+          }         
+
           pred = curr;
+          predTS = currTS;
+
+          
         } while (currKey < lo);
         
-        if (curr == nullptr || isValidTS(curr->getTS()) == false) {
+        
+        
+        if (curr == nullptr || pred->getTS() != predTS || isPending(currTS) || getSnapshotTs(currTS) > rangeQueryEpoch) {
 
           currKey = lo;
           continue;
@@ -557,22 +613,31 @@ public:
           resultKeys[count] = currKey;
           resultValues[count] = currValue;
           count++;
-          curr = getNextV(curr, rangeQueryEpoch);
+          
+          curr = getNextV(pred, rangeQueryEpoch, predTS, &outputExpTS);
           if (curr == nullptr) {
-
             currKey = lo;
-            break;            
+            break;
           }
-          currKey = curr->key; 
-          currValue = curr->value;
-          if (isValidTS(curr->getTS()) == false) {
 
+          currKey = curr->key; 
+          currValue = curr->value;          
+          currTS = curr->getTS();
+          
+          if (pred->getTS() != predTS || currTS != outputExpTS) {
             currKey = lo;
-            break; 
+            break;
           } 
+          
+          pred = curr;
+          predTS = currTS;
+
+ 
         }
         
-        if (curr == nullptr || isValidTS(curr->getTS()) == false) {
+        
+        
+        if (curr == nullptr || pred->getTS() != predTS || isPending(currTS) || getSnapshotTs(currTS) > rangeQueryEpoch) {
 
           currKey = lo;
           continue;
@@ -590,15 +655,14 @@ public:
      * It must be okay that we do this with the main thread and later with another thread!!!
      */
     void initThread(const int tid) {
-      if (localAllocator == nullptr || localAllocator->getGlobalAllocator() != globalAllocator)
-        localAllocator = new LocalAllocator(globalAllocator, tid);
-      currEpoch = 0;
-      index->initThread(tid);
+      if (localListAllocator == nullptr)
+        localListAllocator = new LocalAllocator(globalAllocator, tid);
+      currReclamationEpoch = 0;
+
     }
 
     void deinitThread(const int tid) {
-      localAllocator->returnAllocCaches();
-      index->deinitThread(tid);
+
     }
 
 #ifdef USE_DEBUGCOUNTERS

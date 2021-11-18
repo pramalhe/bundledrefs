@@ -66,14 +66,14 @@ metric3 = "(rq_throughput/1000000.0)"
 metric3_name = "rqs"
   
 
-datastructures= ["abtree" ,"bst" ,"lflist","lazylist","citrus","skiplistlock"]
-logdatastructures = ["bst","citrus","skiplistlock"]
-rludatastructures = ["citrus","lazylist"]
+datastructures= ["list", "skiplist", "tree", "list"]
+logdatastructures = ["tree", "skiplist", "list"]
+#rludatastructures = ["citrus","lazylist"]
 
 def is_valid_key_range(ds,key_range):
-    if key_range == "1000000" and ds!= "abtree": return False
-    if key_range == "100000" and ds not in logdatastructures: return False
-    if key_range == "10000" and (ds in logdatastructures or ds=="abtree"): return False
+    if key_range == "1000000" and ds== "list": return False
+    if key_range == "100000" and ds== "list": return False
+    if key_range == "10000" and ds != "list": return False
     return True
 
 #check if HTM is enabled
@@ -95,45 +95,30 @@ if htm_enabled:
     allalgs =[ "rwlock", "htm_rwlock", "lockfree", "snapcollector", "rlu", "unsafe"]
     
 else:
-    dsToAlgs = { "abtree" :         ["rwlock", "lockfree"],
-                 "bst" :            ["rwlock", "lockfree"],
-                 "lflist" :         ["rwlock", "lockfree", "snapcollector"],
-                 "lazylist" :       ["rwlock", "lockfree", "rlu"],
-                 "citrus" :         ["rwlock", "lockfree", "rlu"],
-                 "skiplistlock" :   ["rwlock", "lockfree", "snapcollector"]
+    dsToAlgs = { "tree" :         ["lbundle", "lockfree", "vcas", "mvccvbr", "unsafe"],
+                 "skiplist" :            ["lbundle", "lockfree", "vcas", "mvccvbr", "unsafe"],
+                 "list" :         ["lbundle", "lockfree", "vcas", "mvccvbr", "unsafe"]
                 }
-    allalgs =[ "rwlock", "lockfree", "snapcollector", "rlu", "unsafe"]
+    allalgs =[ "lbundle", "lockfree", "vcas", "mvccvbr", "unsafe"]
             
-dsToName = { "abtree" :         "ABTree",
-             "bst" :            "Lock-free BST",
-             "lflist" :         "Lock-free List",
-             "lazylist" :       "LazyList",
-             "citrus" :         "Citrus",
-             "skiplistlock" :   "SkipList"
+dsToName = { "tree" :         "Tree",
+             "skiplist" :     "SkipList",
+             "list" :         "List"
             }
             
-dsToHatch = { "abtree" :         [ "", '.', '/', 'O', '-', '*' ],
-                "bst" :          [ "", '.', '/', 'O', '-', '*' ],
-                "lflist" :       [ "", '.', '/', '-', 'O', '-', '*' ],
-                "lazylist" :     [ "", '.', '/', 'x', 'O', '-', '*' ],
-                "citrus" :       [ "", '.', '/', 'x', 'O', '-', '*' ],
-                "skiplistlock" : [ "", '.', '/', '-', 'O', '-', '*' ]
+dsToHatch = { "tree" :         [ "", '.', '/', 'x', 'O', '-', '*' ],
+                "skiplist" :   [ "", '.', '/', 'x', 'O', '-', '*' ],
+                "list" :       [ "", '.', '/', 'x', 'O', '-', '*' ]
             }
 
-dsToColor = {"abtree" :       ['C0','C1','C2','C5'],
-             "bst" :          ['C0','C1','C2','C5'],
-             "lflist" :       ['C0','C1','C2','C3','C5'],
-             "lazylist" :     ['C0','C1','C2','C4','C5'],
-             "citrus" :       ['C0','C1','C2','C4','C5'],
-             "skiplistlock" : ['C0','C1','C2','C3','C5']
+dsToColor = {"tree" :       ['C0','C1','C2','C3','C4'],
+             "skiplist" :   ['C0','C1','C2','C3','C4'],
+             "list" :       ['C0','C1','C2','C3','C4']
             }
            
-dsToMarker = {"abtree" :        ["o", "^", "s", "x"],
-             "bst" :            ["o", "^", "s", "x"],
-             "lflist" :         ["o", "^", "s", "P", "x"],
-             "lazylist" :       ["o", "^", "s", "X", "x"],
-             "citrus" :         ["o", "^", "s", "X", "x"],
-             "skiplistlock" :   ["o", "^", "s", "P", "x"]
+dsToMarker = {"tree" :        ["o", "^", "s", "X", "x"],
+             "skiplist" :     ["o", "^", "s", "X", "x"],
+             "list" :         ["o", "^", "s", "X", "x"]
             }
 
 markerToSize = {    "o":22, #lock
@@ -146,12 +131,9 @@ markerToSize = {    "o":22, #lock
                     "P":22  #snapcollector
                 }
 
-dsToStyle = {"abtree" :         ['-', '-', '-', ':'],
-             "bst" :            ['-', '-', '-', ':'],
-             "lflist" :         ['-', '-', '-', '--', ':'],
-             "lazylist" :       ['-', '-', '-', '--', ':'],
-             "citrus" :         ['-', '-', '-', '--', ':'],
-             "skiplistlock" :   ['-', '-', '-', '--', ':']
+dsToStyle = {"tree" :         ['-', '-', '-', '--', ':'],
+             "skiplist" :     ['-', '-', '-', '--', ':'],
+             "list" :         ['-', '-', '-', '--', ':']
             }
             
 line_width = 5
@@ -353,7 +335,7 @@ def plot_series_line(series,where,filename,user_title,xlabel):
     df = pd.read_sql(query, conn)
     df = df.pivot(index='series', columns='Algorithm', values='y')
     newalgs = dsToAlgs[ds][:]
-    newalgs.append("unsafe")
+    #newalgs.append("unsafe")
     df = df.reindex(columns=newalgs)
     plt.figure()
     if not clean:
@@ -450,11 +432,11 @@ maxrqthreads = maxrqthreads.strip()
 
 print "generating graphs for EXPERIMENT 1 IMPACT OF INCREASING UPDATE THREAD COUNT ... "
 
-updates = ["10","50"]
-rq="0"
-rqsize="100"
-nrq="1"
-key_ranges = ["10000", "100000", "1000000"]
+updates = ["40"]
+rq="10"
+rqsize="1000"
+nrq="0"
+key_ranges = ["10000"]
 for ds in datastructures:
     print "generating graphs for " + ds + " ..."
     for k in key_ranges:
@@ -489,10 +471,10 @@ for ds in datastructures:
 
 print "generating graphs for EXPERIMENT 2 IMPACT OF INCREASING RQ THREAD COUNT ... "
     
-rq="0"
-rqsize="100"
+rq="10"
+rqsize="1000"
 nwork=str(int(maxthreads)-int(maxrqthreads))
-u = "50"
+u = "10"
 key_ranges = ["10000", "100000", "1000000"]
 
 for ds in datastructures:
@@ -565,7 +547,7 @@ for ds in datastructures:
 
 print "generating graphs for EXPERIMENT 4 MIXED WORKLOAD ... "
 
-rqsize = "100"
+rqsize = "1000"
 rq = "2"
 u = "10"
 key_ranges = ["10000", "100000", "1000000"]

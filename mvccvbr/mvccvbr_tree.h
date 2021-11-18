@@ -1,44 +1,37 @@
-#ifndef MVCCVBR_SKIPLIST_H_
-#define MVCCVBR_SKIPLIST_H_
+#ifndef MVCCVBR_TREE_H_
+#define MVCCVBR_TREE_H_
+
 
 #pragma once
 #include "errors.h"
-#include "Index.h"
+#include "TreeIndex.h"
 
 #ifndef MAX_NODES_INSERTED_OR_DELETED_ATOMICALLY
     // define BEFORE including rq_provider.h
     #define MAX_NODES_INSERTED_OR_DELETED_ATOMICALLY 4
 #endif
 
-
-__thread LocalAllocator *localAllocator = nullptr;
-__thread uint64_t currEpoch = 0;
+__thread LocalAllocator *localTreeAllocator = nullptr;
+__thread uint64_t currTreeEpoch;
 
 #define PADDING_BYTES 192
 #define PENDING_TS 1
 #define TS_CYCLE 2
-
-
 #define PENDING_MASK 0x1
+#define MAX_INDEX_ATTEMPTS 5
 
 template <typename K, typename V, class RecManager>
-class mvccvbr_skiplist {
-private:
+class mvccvbr_tree {
+
+
+  private:
     RecManager * const recmgr = nullptr;
-    //RQProvider<K, V, node_t<K,V>, lflist<K,V,RecManager>, RecManager, true, true> * rqProvider;
-#ifdef USE_DEBUGCOUNTERS
-    debugCounters * const counters;
-#endif
-    //nodeptr head;
-    DirectCTSNode<K,V> *head;
-    Index<K,V> *index;
-    Allocator *globalAllocator;
     volatile char padding0[PADDING_BYTES];
     std::atomic<uint64_t> tsEpoch;
     volatile char padding1[PADDING_BYTES];
-    
-
-    //nodeptr new_node(const int tid, const K& key, const V& val, nodeptr next);
+    Allocator *globalAllocator;
+    volatile char padding2[PADDING_BYTES];
+    TreeIndex<K,V> *treeIndex;
     
     // warning: this can only be used when there are no other threads accessing the data structure
     long long debugKeySum(DirectCTSNode<K,V> *head) {
@@ -50,13 +43,10 @@ private:
         }
         return result;      
     }
-
-    //V doInsert(const int tid, const K& key, const V& value, bool onlyIfAbsent);
-    
-    //int init[MAX_TID_POW2] = {0,};
+  
     
     inline uint64_t getReclamationEpoch(){
-      return localAllocator->getEpoch();
+      return localTreeAllocator->getEpoch();
 	  }
      
     inline uint64_t getTsEpoch(){
@@ -70,6 +60,8 @@ private:
         return newEpoch;
       return tmp; 
     }
+  
+    DirectCTSNode<K,V> *head;
     
     inline DirectCTSNode<K,V> *integrateEpochIntoPointer(uint64_t epoch, DirectCTSNode<K,V> *ptr) {
       uint64_t version = epoch;
@@ -110,7 +102,7 @@ private:
     inline bool isValidTS(uint64_t ts) {
       uint64_t shiftedEpoch = (ts & ~TS_MASK);
       uint64_t birthEpoch = (shiftedEpoch >> SNAPSHOT_EPOCH_BITS);
-      return (birthEpoch <= currEpoch);
+      return (birthEpoch <= currTreeEpoch);
     }
     
     inline uint64_t updateTS(DirectCTSNode<K,V> *ptr) {
@@ -128,11 +120,11 @@ private:
 
     
     inline bool isValidVersion(uint64_t version) {
-      return (version <= currEpoch);
+      return (version <= currTreeEpoch);
     }
  
     inline void readGlobalReclamationEpoch() {   
-      currEpoch = getReclamationEpoch();
+      currTreeEpoch = getReclamationEpoch();
     }
     
     inline bool mark(DirectCTSNode<K,V> *victim) {
@@ -150,56 +142,61 @@ private:
     
     inline void initDirectCTSNode(DirectCTSNode<K,V> *node, K key, V value, DirectCTSNode<K,V> *next, DirectCTSNode<K,V> *nextV) {
       readGlobalReclamationEpoch();
-      uint64_t shiftedReclamationEpoch = (currEpoch << SNAPSHOT_EPOCH_BITS);
+      uint64_t shiftedReclamationEpoch = (currTreeEpoch << SNAPSHOT_EPOCH_BITS);
       uint64_t initTS = (shiftedReclamationEpoch | PENDING_MASK);
       node->ts.store(initTS);
       node->key = key;
       node->value = value;
-      node->nextV.store(integrateEpochIntoPointer(currEpoch, nextV)); 
-      node->next.store(integrateEpochIntoPointer(currEpoch, next));
+      node->nextV.store(integrateEpochIntoPointer(currTreeEpoch, nextV)); 
+      node->next.store(integrateEpochIntoPointer(currTreeEpoch, next));
 
     }
 
-public:
+  public:
+  
+    void initThread(int tid) {
+      if (localTreeAllocator == nullptr)
+        localTreeAllocator = new LocalAllocator(globalAllocator, tid);
+      currTreeEpoch = 0;
+      treeIndex->initThread(tid);
+    }
+    
+    void deinitThread(const int tid) {
+
+    }
+    
+    long long debugKeySum() {
+        return debugKeySum(head);
+    }
+
     const K KEY_MIN;
     const K KEY_MAX;
     const V NO_VALUE;
-
-    mvccvbr_skiplist(int numProcesses, const K key_min, const K key_max, const V no_value) : KEY_MIN{key_min}, KEY_MAX{key_max}, NO_VALUE{no_value} {
-        head = nullptr;
-        
-        globalAllocator = new Allocator(sizeof(DirectCTSNode<K,V>), 2, numProcesses);
-        index = new Index<K,V>(numProcesses);
+    mvccvbr_tree(int numProcesses, const K KEY_MIN, const K KEY_MAX, const V NO_VALUE) : KEY_MIN(KEY_MIN), KEY_MAX(KEY_MAX), NO_VALUE(NO_VALUE) {
+    
+        globalAllocator = new Allocator(getNodeSize(), 2, numProcesses);        
+        treeIndex = new TreeIndex<K,V>(numProcesses);
         initThread(0);
         
         tsEpoch = 2;
         
-        DirectCTSNode<K,V> *tail = (DirectCTSNode<K,V> *)localAllocator->alloc();
+        DirectCTSNode<K,V> *tail = (DirectCTSNode<K,V> *)localTreeAllocator->alloc();
         initDirectCTSNode(tail, KEY_MAX, NO_VALUE, nullptr, nullptr);
         updateTS(tail);
         
                        
-        head = (DirectCTSNode<K,V> *)localAllocator->alloc();
+        head = (DirectCTSNode<K,V> *)localTreeAllocator->alloc();
         initDirectCTSNode(head, KEY_MIN, NO_VALUE, tail, nullptr);
         updateTS(head);
         
-        index->init(head, tail);
-        
         incrementTsEpoch(2);
-    }
-
-    ~mvccvbr_skiplist() {
-      cout << "DirectCTSNode size = " << sizeof(DirectCTSNode<K,V>) << endl;
-      cout << "IndexNode size = " << index->getNodeSize() << endl;
-      cout << "TS epoch = " << getTsEpoch() << endl;
-      cout << "Reclamation epoch = " << getReclamationEpoch() << endl;
-      cout << "Num caches = " << globalAllocator->getNumCaches() << endl;
-      cout << "Index reclamation epoch = " << index->getIndexEpoch() << endl;
-      cout << "Index num caches = " << index->getNumCaches() << endl;
-      delete globalAllocator;
-      delete index;
+        treeIndex->init(head, KEY_MAX);
     }
     
+    ~mvccvbr_tree() {
+      cout<<"DirectCTSNode size = " << sizeof(DirectCTSNode<K,V>) << ". TS epoch = " << getTsEpoch() << ". Reclamation epoch = " << getReclamationEpoch() <<endl;
+    }
+
   private:
   
     DirectCTSNode<K,V> *readVersion(DirectCTSNode<K,V> *ptr, uint64_t snapshotTS) {
@@ -242,10 +239,10 @@ public:
 
       DirectCTSNode<K,V> *deleted, *deletedNext, *output, *origNextV, *optimizedNextV, *succNext, *currNextV;
       uint64_t succTS, succTagTS, currTS, updateEpoch, tmp;
-
+      
       if (!isMarked(curr->next)) 
         return nullptr;
-      
+
       DirectCTSNode<K,V> *succ = curr->getNext();
       succNext = succ->next; 
       succTS = succ->getTS();
@@ -261,7 +258,7 @@ public:
       }     
 
       if (isPending(succTS)) {
-        //readGlobalReclamationEpoch();
+        readGlobalReclamationEpoch();
         succTS = updateTS(succ);
         if (pred->next != integrateEpochIntoPointer(predVersion, curr))
           return nullptr;
@@ -273,37 +270,37 @@ public:
       // preparing the new node
       // to be inserted instead of the flagged one
       succNext = succ->getNext();
-      DirectCTSNode<K,V> *succTag = (DirectCTSNode<K,V> *)localAllocator->alloc();
+      DirectCTSNode<K,V> *succTag = (DirectCTSNode<K,V> *)localTreeAllocator->alloc();
       initDirectCTSNode(succTag, succ->key, succ->value, succNext, curr);
       origNextV = succTag->nextV;
       
-      if (pred->updateNext(integrateEpochIntoPointer(predVersion, curr), integrateEpochIntoPointer(currEpoch, succTag))) {
-        updateEpoch = currEpoch;        
+      if (pred->updateNext(integrateEpochIntoPointer(predVersion, curr), integrateEpochIntoPointer(currTreeEpoch, succTag))) {
+        updateEpoch = currTreeEpoch;        
         succTagTS = updateTS(succTag);
         
         currNextV = curr->getNextV();
         if (getSnapshotTs(curr->getTS()) == getSnapshotTs(succTagTS)) {
-          optimizedNextV = integrateEpochIntoPointer(currEpoch, currNextV);
+          optimizedNextV = integrateEpochIntoPointer(currTreeEpoch, currNextV);
           succTag->nextV.compare_exchange_strong(origNextV, optimizedNextV);
         }
         
-        if (isPending(succTagTS) == false) 
-          index->insert(succTag, succTagTS);
+        if (isPending(succTagTS) == false)
+          treeIndex->insert(succTag, succTagTS);
         
         deleted = curr;
         do {
           deletedNext = deleted->getNext();
-          index->remove(deleted->key);
-          localAllocator->retire(deleted);
+          treeIndex->remove(deleted->key);
+          localTreeAllocator->retire(deleted);
           deleted = deletedNext;
         } while (deleted != succ);
         
-        localAllocator->retire(succ);
+        localTreeAllocator->retire(succ);
         
         output = integrateEpochIntoPointer(updateEpoch, succTag);
         return output;
       } else {
-        localAllocator->returnAlloc(succTag);
+        localTreeAllocator->returnAlloc(succTag);
         return nullptr;
       }
 
@@ -312,25 +309,43 @@ public:
     DirectCTSNode<K,V> *find(K key, DirectCTSNode<K,V> **predPtr, uint64_t *predVersion, K *currKey) {
       DirectCTSNode<K,V> *pred, *predNext, *predNextRaw, *curr, *currNext;
       uint64_t version, tmpEpoch;
-      K tmpKey;
       DirectCTSNode<K,V> *tmp;
+      K tmpKey, lessKey;
+      int attemptsCounter;
         
       try_again:
         tmpKey = key;
         readGlobalReclamationEpoch();
+        attemptsCounter = 0;
 
-        do {
-          pred = index->findPred(tmpKey);
+        
+        while (true) {
+          if (attemptsCounter == MAX_INDEX_ATTEMPTS) {
+            pred = head;
+            predNextRaw = pred->next;
+            break;
+          }
+          pred = treeIndex->findPred(tmpKey, &lessKey);
+          assert(pred != nullptr);
           tmpKey = pred->key;
+          assert(tmpKey < key || lessKey < tmpKey);
           predNextRaw = pred->next;
+          attemptsCounter++;
           if (isValidTS(pred->getTS()) == false) {
             goto try_again;
           }
-        } while (isMarked(predNextRaw) || isFlagged(predNextRaw));
-       
+          if (tmpKey >= key || isMarked(predNextRaw) || isFlagged(predNextRaw)) {
+            tmpKey = lessKey;
+            continue;
+          }
+          break;
+        }        
+            
         predNext = getDirectCTSNode(predNextRaw);
         version = getVersion(predNextRaw);
         curr = predNext;
+        
+
         
         while (true) {
           while (isMarked(curr->next)) {
@@ -356,7 +371,7 @@ public:
           } else if (isFlagged(curr->next)) {
             currNext = curr->getNext();
             if (isValidTS(curr->getTS()) == false) {
-              goto try_again;
+              readGlobalReclamationEpoch();goto try_again;
             }
             curr = currNext;
             continue;
@@ -380,7 +395,7 @@ public:
           curr = getDirectCTSNode(tmp);
           version = getVersion(tmp);
           tmpKey = curr->key;
-          if (pred->next != tmp || tmpKey < key) {
+          if (isValidTS(curr->getTS()) == false) {
             goto try_again;
           }
         } else {
@@ -395,15 +410,8 @@ public:
         *predVersion = version;
         *currKey = tmpKey;
         return curr;   
-    } 
-    
-    inline void backoff(int amount) {
-        if(amount == 0) return;
-        volatile long long sum = 0;
-        int limit = amount;
-        for(int i = 0; i < limit; i++)
-            sum += i; 
-    } 
+    }  
+
 
   public:
 
@@ -423,25 +431,26 @@ public:
           return result;
         } 
         
-        DirectCTSNode<K,V> *newNode = (DirectCTSNode<K,V> *)localAllocator->alloc();
+        DirectCTSNode<K,V> *newNode = (DirectCTSNode<K,V> *)localTreeAllocator->alloc();
         initDirectCTSNode(newNode, key, value, curr, curr);
         initEpoch = newNode->ts;
         origNextV = newNode->nextV;
                  
-        if (pred->updateNext(integrateEpochIntoPointer(predVersion, curr), integrateEpochIntoPointer(currEpoch, newNode))) {
+        if (pred->updateNext(integrateEpochIntoPointer(predVersion, curr), integrateEpochIntoPointer(currTreeEpoch, newNode))) {
           newNodeTS = updateTS(newNode);
           if (isValidTS(newNodeTS) == true) {
             if (getSnapshotTs(curr->getTS()) == getSnapshotTs(newNodeTS)) {
-              optimizedNextV = integrateEpochIntoPointer(currEpoch, curr->getNextV());
+              optimizedNextV = integrateEpochIntoPointer(currTreeEpoch, curr->getNextV());
               newNode->nextV.compare_exchange_strong(origNextV, optimizedNextV);
             }
-            index->insert(newNode, newNodeTS);
+            treeIndex->insert(newNode, newNodeTS);
           }
 
+          
             
           return NO_VALUE;
         } else {
-          localAllocator->returnAlloc(newNode);
+          localTreeAllocator->returnAlloc(newNode);
         }
   
           
@@ -464,7 +473,6 @@ public:
       while (true) {
         result = NO_VALUE;
         curr = find(key, &pred, &predVersion, &currKey);
-        //if (pred->next != integrateEpochIntoPointer(predVersion, curr)) continue;
         if (currKey != key) return result;  
         result = curr->value; 
         if (mark(curr) == false) continue; // sets the remover identity
@@ -485,6 +493,14 @@ public:
 
     }
     
+    inline void backoff(int amount) {
+        if(amount == 0) return;
+        volatile long long sum = 0;
+        int limit = amount;
+        for(int i = 0; i < limit; i++)
+            sum += i; 
+    }
+
     int rangeQuery(const int tid, const K& lo, const K& hi, K * const resultKeys, V * const resultValues) {	
     //intptr_t rangeQuery(intptr_t low, intptr_t high, int tid) {      
      
@@ -582,36 +598,24 @@ public:
       }
       
     } 
+
+    std::string myName()
+    {
+        return "DirectCTSTree";
+    }
     
-    /**
-     * This function must be called once by each thread that will
-     * invoke any functions on this class.
-     * 
-     * It must be okay that we do this with the main thread and later with another thread!!!
-     */
-    void initThread(const int tid) {
-      if (localAllocator == nullptr || localAllocator->getGlobalAllocator() != globalAllocator)
-        localAllocator = new LocalAllocator(globalAllocator, tid);
-      currEpoch = 0;
-      index->initThread(tid);
+    std::string getInfo() {
+        return "epoch: " + to_string(getReclamationEpoch()) + ", ts epoch: " + to_string(getTsEpoch());
     }
 
-    void deinitThread(const int tid) {
-      localAllocator->returnAllocCaches();
-      index->deinitThread(tid);
+    size_t getNodeSize() {
+      return sizeof(DirectCTSNode<K,V>);
     }
-
-#ifdef USE_DEBUGCOUNTERS
-    debugCounters * debugGetCounters() { return counters; }
-    void clearCounters() { counters->clear(); }
-#endif
-    long long debugKeySum() {
-        return debugKeySum(head);
+    
+    size_t getIndexNodeSize() {
+      return treeIndex->getNodeSize();
     }
-
-//    void validateRangeQueries(const long long prefillKeyChecksum) {
-//        rqProvider->validateRQs(prefillKeyChecksum);
-//    }
+    
     bool validate(const long long keysum, const bool checkkeysum) {
         return true;
     }

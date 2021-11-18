@@ -15,19 +15,16 @@ fi
 
 check_ds_technique() {
     ## args: ds alg
-    if [ "$2" == "snapcollector" ] && [ "$1" != "lflist" ] && [ "$1" != "skiplistlock" ] ; then return 1 ; fi
-    if [ "$2" == "rlu" ] && [ "$1" != "lazylist" ] && [ "$1" != "citrus" ] ; then return 1 ; fi
-    if [ "$2" == "lbundle" ] && [ "$1" != "lazylist" ] && [ "$1" != "skiplistlock" ] && [ "$1" != "citrus" ] && [ "$1" != "bst" ]; then return 1 ; fi
-    if [ "$2" == "vcas" ] && [ "$1" != "bst" ] ; then return 1 ; fi
+    if [ "$2" != "unsafe" ] && [ "$2" != "lockfree" ] && [ "$2" != "vcas" ] && [ "$2" != "mvccvbr" ] && [ "$2" != "lbundle" ] ; then return 1 ; fi
     return 0
 }
 export -f check_ds_technique
 
 check_ds_size() {
     ## args: ds k
-    if [ "$2" == "1000000" ] && [ "$1" != "abtree" ]  && [ "$1" != "citrus" ] && [ "$1" != "skiplistlock" ] ; then return 1 ; fi
-    if [ "$2" == "100000" ] && [ "$1" != "bst" ] && [ "$1" != "citrus" ] && [ "$1" != "skiplistlock" ]  ; then return 1 ; fi
-    if [ "$2" == "10000" ] && [ "$1" != "lflist" ] && [ "$1" != "lazylist" ] ; then return 1 ; fi
+    if [ "$2" == "1000000" ] && [ "$1" != "tree" ]  && [ "$1" != "skiplist" ] ; then return 1 ; fi
+    if [ "$2" == "100000" ] && [ "$1" != "tree" ] && [ "$1" != "skiplist" ] ; then return 1 ; fi
+    if [ "$2" == "10000" ] && [ "$1" != "list" ] ; then return 1 ; fi
     return 0
 }
 export -f check_ds_size

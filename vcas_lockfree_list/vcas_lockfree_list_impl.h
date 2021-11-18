@@ -88,8 +88,9 @@ retry:
     pred_next = rqProvider->read_vcas(tid, pred->p_next);
     if (isMarked(pred_next))
       goto retry;
+    curr = pred_next;
       
-    for (curr = pred_next;; curr = curr_next)
+    while (true)
     {
         curr_next = rqProvider->read_vcas(tid, curr->p_next);
         while (isMarked(curr_next)) {
@@ -100,6 +101,7 @@ retry:
             break;
         pred = curr;
         pred_next = curr_next;
+        curr = pred_next;
     } 
     
     if (curr != pred_next && rqProvider->cas_vcas(tid, &pred->p_next, pred_next, curr) == false)
@@ -234,9 +236,9 @@ V list<K, V, RecManager>::doInsert(const int tid, const K& key, const V& value, 
   
       //if (allocated == false) {
         p_new_node = allocateNode(tid); 
-#ifdef __HANDLE_STATS
-        GSTATS_APPEND(tid, node_allocated_addresses, ((long long) p_new_node)%(1<<12));
-#endif
+//#ifdef __HANDLE_STATS
+//        GSTATS_APPEND(tid, node_allocated_addresses, ((long long) p_new_node)%(1<<12));
+//#endif
         initNode(tid, p_new_node, key, value);
         //allocated = true;
       //}
@@ -259,6 +261,7 @@ template <typename K, typename V, class RecManager>
 V list<K, V, RecManager>::erase(const int tid, const K& key) {
     nodeptr p_pred;
     nodeptr p_succ;
+    nodeptr victim;
 
     V ret = NO_VALUE;
     
@@ -268,11 +271,12 @@ V list<K, V, RecManager>::erase(const int tid, const K& key) {
         recmgr->enterQuiescentState(tid);
         return ret;
     }
-    bool result = mark_list_node(tid, p_succ);
+    victim = p_succ;
+    bool result = mark_list_node(tid, victim);
     if (result) {
-      ret = p_succ->val;
+      ret = victim->val;
       find_impl(tid, key, &p_pred, &p_succ);
-      recmgr->retire(tid, p_succ);
+      recmgr->retire(tid, victim);
     }
     
     recmgr->enterQuiescentState(tid);

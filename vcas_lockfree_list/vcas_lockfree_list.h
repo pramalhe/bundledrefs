@@ -142,7 +142,7 @@ class list {
     return (lo <= key && key <= hi);
   }
   inline bool isLogicallyDeleted(const int tid, nodeptr node) {
-    return (isMarked(rqProvider->read_vcas_unsafe(0, node->p_next)));
+    return (isMarked(rqProvider->read_vcas_unsafe(tid, node->p_next)));
   }
 
   inline bool isLogicallyInserted(const int tid, nodeptr node) {
@@ -169,8 +169,7 @@ class list {
  public:
 
   bool validate(const long long keysum, const bool checkkeysum) { 
-    if (checkkeysum) 
-      return (debugKeySum(p_head) == keysum);
+    return true;
   }
 
   node_t<K, V>* debug_getEntryPoint() { return p_head; }

@@ -6,8 +6,8 @@
 #include "Allocator.h"
 
 
-#define DEFAULT_ALLOC_CACHES 10
-#define DEFAULT_FREE_CACHES 10
+#define DEFAULT_ALLOC_CACHES 5
+#define DEFAULT_FREE_CACHES 1
 
 #define DEFAULT_LIFE_CYCLE 2
 
@@ -26,6 +26,10 @@ class LocalAllocator {
 
     
   public:
+  
+    Allocator *getGlobalAllocator() {
+      return global;
+    }
   
     uint64_t getEpoch(){
       return global->getEpoch();
@@ -113,10 +117,10 @@ class LocalAllocator {
         if (freeCaches->isFull()) {
           tmp = freeCaches->getNext();
           
-          
-          freeCaches->setNext(nullptr);
-          allocCachesTail->setNext(freeCaches);
-          allocCachesTail = allocCachesTail->getNext();
+          global->pushAllocCache(freeCaches);
+          //freeCaches->setNext(nullptr);
+          //allocCachesTail->setNext(freeCaches);
+          //allocCachesTail = allocCachesTail->getNext();
           
           freeCaches = tmp;
         } else {
@@ -136,6 +140,27 @@ class LocalAllocator {
         retire(obj);
       else
         allocCachesHead->addEntry(obj);    
+    }
+    
+    void returnAllocCaches() {
+      AllocCache *tmp;
+      
+      while (freeCaches != nullptr) {
+        tmp = freeCaches->getNext();
+        if (freeCaches->isEmpty() == false) {
+          global->pushAllocCache(freeCaches);
+        }
+        freeCaches = tmp;
+      }
+
+      while (allocCachesHead != nullptr) {
+        tmp = allocCachesHead->getNext();
+        if (allocCachesHead->isEmpty() == false) {
+          global->pushAllocCache(allocCachesHead);
+        }
+        allocCachesHead = tmp;
+      }      
+      
     }
 
 

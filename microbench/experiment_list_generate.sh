@@ -14,9 +14,9 @@ source ./supported.inc
 
 ## Abridged experimental configurations (for artifact evaluation)
 # rqtechniques="lockfree rwlock unsafe rlu lbundle vcas"
-rqtechniques="lbundle unsafe rlu lockfree rwlock"
-datastructures="skiplistlock"
-ksizes="100000"
+rqtechniques="mvccvbr vcas lbundle unsafe lockfree"
+datastructures="list"
+ksizes="10000"
 
 prepare_exp() {
   echo 0 0 0 0 0 0 $1 prepare
@@ -24,10 +24,10 @@ prepare_exp() {
 
 run_workloads() {
   echo "Preparing workloads: THROUGHPUT WHILE VARYING WORKLOAD DISTRIBUTION"
-  count=0
-  rqsize=50
-  rqrates="0 2 10 50"
-  urates="0 1 5 25 45 50" # 2 * rate = total update %
+  count=5
+  rqsize=1000
+  rqrates="10"
+  urates="40" # 2 * rate = total update %
   nrq=0
   prepare_exp "workloads" >>experiment_list.txt
   for rq in $rqrates; do
@@ -117,6 +117,6 @@ run_rq_threads() {
 #< Indicates the plotting script should detect this line as an experiment to plot
 run_workloads #<
 # run_rq_sizes #<
-run_rq_threads #<
+#run_rq_threads #<
 
 echo "Total experiment lines generated:" $(cat experiment_list.txt | wc -l)

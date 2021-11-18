@@ -7,7 +7,7 @@
 
 #define PADDING_BYTES 192
 
-#define HEAP_SIZE (32 * 32 * 1024 * 1024L)
+#define HEAP_SIZE (64 * 32 * 1024 * 1024L)
 
 class Allocator {  
   private:
@@ -20,6 +20,7 @@ class Allocator {
     std::atomic<AllocCache *> head;
     std::atomic<uint64_t> numCaches;
     int entriesPerCache;
+    void *heap;
     
     
   public:
@@ -34,7 +35,7 @@ class Allocator {
       head = nullptr;
       
     
-      void *heap = (void *)malloc(HEAP_SIZE);
+      heap = (void *)malloc(HEAP_SIZE);
       char *currHeap = (char *)heap;
       memset(currHeap, 0, HEAP_SIZE);
       numCaches = 0;
@@ -46,6 +47,10 @@ class Allocator {
         currHeap += ENTRIES_PER_CACHE * this->objectSize;
       }
 
+    }
+    
+    ~Allocator()  {
+      free(heap);
     }
     
     uint64_t getEpoch(){
@@ -79,6 +84,18 @@ class Allocator {
       }
       currHead->setNext(nullptr);
       return currHead;
+    }
+    
+    void pushAllocCache(AllocCache *allocCache) {
+      AllocCache *currHead;
+      while (true) {
+        currHead = head;
+        allocCache->setNext(currHead);
+        if (head.compare_exchange_strong(currHead, allocCache) == true) {
+          numCaches.fetch_add(1);
+          return;
+        }        
+      } 
     }
     
     int getNumCaches() {
