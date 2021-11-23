@@ -89,6 +89,12 @@ private:
       return (shiftedVersion  >> POINTER_BITS);
     }
     
+    inline uint64_t getReclamationEpochFromTs(uint64_t ts) {
+      uint64_t shiftedEpoch = (ts & ~TS_MASK);
+      uint64_t birthEpoch = (shiftedEpoch >> SNAPSHOT_EPOCH_BITS);
+      return birthEpoch;
+    }
+    
     inline bool isPending(uint64_t ts) {
       return (ts & PENDING_MASK);
     }
@@ -202,38 +208,75 @@ public:
     
   private:
   
-    DirectCTSNode<K,V> *readVersion(DirectCTSNode<K,V> *ptr, uint64_t snapshotTS) {
-      DirectCTSNode<K,V> *curr, *currNextV;
-      uint64_t currNextVVersion, currTS, currNextVTS;
-      curr = ptr;
-      currTS = curr->getTS();
-      if (isValidTS(currTS) == false)
+    DirectCTSNode<K,V> *readVersion(DirectCTSNode<K,V> *ptr, uint64_t snapshotTS, uint64_t expTS, uint64_t *outputExpTS) {
+      DirectCTSNode<K,V> *curr, *currNextV, *currNextVRaw, *pred, *predNextVRaw;
+      uint64_t predNextVVersion, currTS, currNextVTS, predTS;
+      
+      if (ptr == nullptr)
         return nullptr;
       
+      pred = ptr;
+      predNextVRaw = pred->nextV;
+      predNextVVersion = getVersion(predNextVRaw);
+      curr = getDirectCTSNode(predNextVRaw);
+      predTS = pred->getTS();
+      if (predTS != expTS || curr == nullptr)
+        return nullptr;
+        
+      currTS = curr->getTS();
+      if (isPending(currTS) || getReclamationEpochFromTs(currTS) > predNextVVersion)
+        return nullptr;
+        
       while (getSnapshotTs(currTS) > snapshotTS) {
-        currNextV = curr->getNextV();
-        currNextVTS = currNextV->getTS();
-        currNextVVersion = curr->getNextVVersion();
-        if (isValidVersion(currNextVVersion) == false || isValidTS(currNextVTS) == false)
-          return nullptr;
-        curr = currNextV;
-        currTS = currNextVTS;
+        pred = curr;
+        predNextVRaw = pred->nextV;
+        predNextVVersion = getVersion(predNextVRaw);        
+        curr = getDirectCTSNode(predNextVRaw);      
+        predTS = pred->getTS();
+        if (predTS != currTS || curr == nullptr)
+          return nullptr;        
+        
+        currTS = curr->getTS();
+        if (isPending(currTS) || getReclamationEpochFromTs(currTS) > predNextVVersion)
+          return nullptr;        
+   
       }
+      *outputExpTS = currTS;
       return curr;
     }
     
-    DirectCTSNode<K,V> *getNextV(DirectCTSNode<K,V> *ptr, uint64_t snapshotTS) {
+    DirectCTSNode<K,V> *getNextV(DirectCTSNode<K,V> *pred, uint64_t snapshotTS, uint64_t expPredTS, uint64_t *outputExpTS) {
       
-      DirectCTSNode<K,V> *pred, *curr, *currNextV;
-      uint64_t predVersion, currTS, tmp;
-      
-      pred = ptr;
-      curr = pred->getNext();
+      DirectCTSNode<K,V> *curr, *currNextV, *predNextRaw;
+      uint64_t predVersion, currTS, tmp, predTS, expCurrTS;
+      K predKey = pred->key, currKey;
+
+      predNextRaw = pred->next;
+      predVersion = getVersion(predNextRaw);
+      curr = getDirectCTSNode(predNextRaw);
+      predTS = pred->getTS();
+      if (curr == nullptr || predTS != expPredTS)
+        return nullptr;
+
       currTS = curr->getTS();
+      if (getReclamationEpochFromTs(currTS) > predVersion)
+        return nullptr;
       if (isPending(currTS)) {
-        if (isValidTS(updateTS(curr)) == false) return nullptr;
+        currTS = updateTS(curr);
+        return nullptr;
       }
-      return readVersion(curr, snapshotTS);
+      
+      if (getSnapshotTs(currTS) <= snapshotTS)
+        return curr;
+      curr = readVersion(curr, snapshotTS, currTS, &expCurrTS);
+      if (curr == nullptr)
+        return nullptr;
+      currKey = curr->key;
+      currTS = curr->getTS();
+      if (currTS != expCurrTS /*|| currKey <= predKey*/)
+        return nullptr;
+      *outputExpTS = expCurrTS;
+      return curr;
     }
     
     // all pointers are assumed to be unmarked and unflagged
@@ -281,11 +324,11 @@ public:
         updateEpoch = currEpoch;        
         succTagTS = updateTS(succTag);
         
-        currNextV = curr->getNextV();
-        if (getSnapshotTs(curr->getTS()) == getSnapshotTs(succTagTS)) {
-          optimizedNextV = integrateEpochIntoPointer(currEpoch, currNextV);
-          succTag->nextV.compare_exchange_strong(origNextV, optimizedNextV);
-        }
+        //currNextV = curr->getNextV();
+        //if (getSnapshotTs(curr->getTS()) == getSnapshotTs(succTagTS)) {
+          //optimizedNextV = integrateEpochIntoPointer(currEpoch, currNextV);
+          //succTag->nextV.compare_exchange_strong(origNextV, optimizedNextV);
+        //}
         
         if (isPending(succTagTS) == false) 
           index->insert(succTag, succTagTS);
@@ -431,10 +474,10 @@ public:
         if (pred->updateNext(integrateEpochIntoPointer(predVersion, curr), integrateEpochIntoPointer(currEpoch, newNode))) {
           newNodeTS = updateTS(newNode);
           if (isValidTS(newNodeTS) == true) {
-            if (getSnapshotTs(curr->getTS()) == getSnapshotTs(newNodeTS)) {
-              optimizedNextV = integrateEpochIntoPointer(currEpoch, curr->getNextV());
-              newNode->nextV.compare_exchange_strong(origNextV, optimizedNextV);
-            }
+            //if (getSnapshotTs(curr->getTS()) == getSnapshotTs(newNodeTS)) {
+              //optimizedNextV = integrateEpochIntoPointer(currEpoch, curr->getNextV());
+              //newNode->nextV.compare_exchange_strong(origNextV, optimizedNextV);
+            //}
             index->insert(newNode, newNodeTS);
           }
 
@@ -488,9 +531,9 @@ public:
     int rangeQuery(const int tid, const K& lo, const K& hi, K * const resultKeys, V * const resultValues) {	
     //intptr_t rangeQuery(intptr_t low, intptr_t high, int tid) {      
      
-      uint64_t predVersion, rangeQueryEpoch, minEpoch, predTS;
+      uint64_t predVersion, rangeQueryEpoch, minEpoch, predTS, currTS, outputExpTS;
       int count;
-      K predKey, currKey, tmpKey;
+      K predKey, currKey, tmpKey, prevKey;
       V currValue;
  	    DirectCTSNode<K,V> *pred, *curr;
   
@@ -514,14 +557,34 @@ public:
         curr = find(currKey, &pred, &predVersion, &tmpKey);
         
         predKey = pred->key;
+        predTS = pred->getTS();
         
-        pred = readVersion(pred, rangeQueryEpoch);
-        
-        if (pred == nullptr) {
-
+        if (isValidTS(predTS) == false) {
           currKey = lo;
           continue;
         }
+        
+        
+        if (getSnapshotTs(predTS) <= rangeQueryEpoch) {
+          curr = pred;
+          outputExpTS = predTS;
+        } else
+          curr = readVersion(pred, rangeQueryEpoch, predTS, &outputExpTS);
+        
+        if (curr == nullptr) {
+          currKey = lo;
+          continue;
+        }
+        
+        currTS = curr->getTS();
+        
+        if (pred->getTS() != predTS || currTS != outputExpTS) {
+          currKey = lo;
+          continue;
+        }
+        
+        pred = curr;
+        predTS = currTS;
         
         if (pred->key >= lo) {
 
@@ -529,24 +592,39 @@ public:
           continue;
         }
         
+        if (predTS != pred->getTS()) {
+          currKey = lo;
+          continue;
+        }
+        
+        
+        
         do {
-          curr = getNextV(pred, rangeQueryEpoch);
+          curr = getNextV(pred, rangeQueryEpoch, predTS, &outputExpTS);
           if (curr == nullptr) {
-
             currKey = lo;
-            break;            
+            break;
           }
+
           currKey = curr->key;  
           currValue = curr->value;
-          if (isValidTS(curr->getTS()) == false) {
-
+          currTS = curr->getTS();
+          
+          
+          if (pred->getTS() != predTS || currTS != outputExpTS) {
             currKey = lo;
-            break; 
-          }        
+            break;
+          }         
+
           pred = curr;
+          predTS = currTS;
+
+          
         } while (currKey < lo);
         
-        if (curr == nullptr || isValidTS(curr->getTS()) == false) {
+        
+        
+        if (curr == nullptr || pred->getTS() != predTS || isPending(currTS) || getSnapshotTs(currTS) > rangeQueryEpoch) {
 
           currKey = lo;
           continue;
@@ -557,22 +635,31 @@ public:
           resultKeys[count] = currKey;
           resultValues[count] = currValue;
           count++;
-          curr = getNextV(curr, rangeQueryEpoch);
+          
+          curr = getNextV(pred, rangeQueryEpoch, predTS, &outputExpTS);
           if (curr == nullptr) {
-
             currKey = lo;
-            break;            
+            break;
           }
-          currKey = curr->key; 
-          currValue = curr->value;
-          if (isValidTS(curr->getTS()) == false) {
 
+          currKey = curr->key; 
+          currValue = curr->value;          
+          currTS = curr->getTS();
+          
+          if (pred->getTS() != predTS || currTS != outputExpTS) {
             currKey = lo;
-            break; 
+            break;
           } 
+          
+          pred = curr;
+          predTS = currTS;
+
+ 
         }
         
-        if (curr == nullptr || isValidTS(curr->getTS()) == false) {
+        
+        
+        if (curr == nullptr || pred->getTS() != predTS || isPending(currTS) || getSnapshotTs(currTS) > rangeQueryEpoch) {
 
           currKey = lo;
           continue;

@@ -15,8 +15,8 @@ source ./supported.inc
 ## Abridged experimental configurations (for artifact evaluation)
 # rqtechniques="lockfree rwlock unsafe rlu lbundle vcas"
 rqtechniques="mvccvbr vcas lbundle unsafe lockfree"
-datastructures="list"
-ksizes="10000"
+datastructures="skiplist tree list"
+ksizes="1000000 10000"
 
 prepare_exp() {
   echo 0 0 0 0 0 0 $1 prepare
@@ -26,8 +26,8 @@ run_workloads() {
   echo "Preparing workloads: THROUGHPUT WHILE VARYING WORKLOAD DISTRIBUTION"
   count=5
   rqsize=1000
-  rqrates="10"
-  urates="40" # 2 * rate = total update %
+  rqrates="0"
+  urates="0" # 2 * rate = total update %
   nrq=0
   prepare_exp "workloads" >>experiment_list.txt
   for rq in $rqrates; do

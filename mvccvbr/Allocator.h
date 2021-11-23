@@ -7,7 +7,7 @@
 
 #define PADDING_BYTES 192
 
-#define HEAP_SIZE (64 * 32 * 1024 * 1024L)
+#define HEAP_SIZE (64 * 128 * 1024 * 1024L)
 
 class Allocator {  
   private:

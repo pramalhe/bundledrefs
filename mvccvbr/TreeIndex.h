@@ -276,9 +276,13 @@ class TreeIndex
     }
     
     void initThread(int tid) {
-      if (localTreeIndexAllocator == nullptr)
+      if (localTreeIndexAllocator == nullptr || localTreeIndexAllocator->getGlobalAllocator() != globalTreeIndexAllocator)
         localTreeIndexAllocator = new LocalAllocator(globalTreeIndexAllocator, tid);
       currTreeIndexEpoch = 0;
+    }
+    
+    void deinitThread(const int tid) {
+      localTreeIndexAllocator->returnAllocCaches();
     }
     
     void init(DirectCTSNode<K,V> *head, K maxElement) {
@@ -489,6 +493,10 @@ class TreeIndex
     
     size_t getTreeIndexNodeSize() {
       return sizeof(TreeIndexNode);
+    }
+    
+    int getNumCaches() {
+      return globalTreeIndexAllocator->getNumCaches();
     }
     
 } __attribute__((aligned((64))));

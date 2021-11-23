@@ -24,6 +24,10 @@ class AllocCache {
       this->maxEpoch = 0;
     }
     
+    ~AllocCache() {
+      free(this->entries);
+    }
+    
     uint64_t getMaxEpoch() {
       return maxEpoch;
     }

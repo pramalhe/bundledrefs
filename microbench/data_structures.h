@@ -824,6 +824,26 @@ using namespace vcas_lazylist;
 #define DEINIT_ALL
 #define PRINT_OBJ_SIZES cout << "sizes: node=" << (sizeof(DirectCTSNode<test_type, test_type>)) << endl;
 /*--------------------------------------------------------------------------*/ 
+#elif defined(VBR_UNSAFE_LIST)
+#include "record_manager.h"
+#include "unsafe_vbr_list.h"
+//using namespace mvcc_vbr;
+
+#define DS_DECLARATION unsafe_vbr_list<test_type, test_type, MEMMGMT_T>
+#define MEMMGMT_T record_manager<RECLAIM, ALLOC, POOL, UnsafeVBRNode<test_type, test_type>>
+#define DS_CONSTRUCTOR new DS_DECLARATION(TOTAL_THREADS, KEY_MIN, KEY_MAX, NO_VALUE)
+
+#define INSERT_AND_CHECK_SUCCESS ds->INSERT_FUNC(tid, key, VALUE) == ds->NO_VALUE
+#define DELETE_AND_CHECK_SUCCESS ds->ERASE_FUNC(tid, key) != ds->NO_VALUE
+#define FIND_AND_CHECK_SUCCESS ds->FIND_FUNC(tid, key)
+#define RQ_AND_CHECK_SUCCESS(rqcnt) (rqcnt = ds->RQ_FUNC(tid, key, key + RQSIZE - 1, rqResultKeys, (VALUE_TYPE *)rqResultValues))
+#define RQ_GARBAGE(rqcnt) rqResultKeys[0] + rqResultKeys[rqcnt - 1]
+#define INIT_THREAD(tid) ds->initThread(tid)
+#define DEINIT_THREAD(tid) ds->deinitThread(tid);
+#define INIT_ALL
+#define DEINIT_ALL
+#define PRINT_OBJ_SIZES cout << "sizes: node=" << (sizeof(UnsafeVBRNode<test_type, test_type>)) << endl;
+/*--------------------------------------------------------------------------*/ 
 #elif defined(MVCC_VBR_LIST)
 #include "record_manager.h"
 #include "mvccvbr_list.h"
@@ -843,6 +863,7 @@ using namespace vcas_lazylist;
 #define INIT_ALL
 #define DEINIT_ALL
 #define PRINT_OBJ_SIZES cout << "sizes: node=" << (sizeof(DirectCTSNode<test_type, test_type>)) << endl;
+/*--------------------------------------------------------------------------*/ 
 
 #else
 #error "Failed to define a data structure"

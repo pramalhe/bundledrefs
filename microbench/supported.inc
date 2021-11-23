@@ -15,7 +15,7 @@ fi
 
 check_ds_technique() {
     ## args: ds alg
-    if [ "$2" != "unsafe" ] && [ "$2" != "lockfree" ] && [ "$2" != "vcas" ] && [ "$2" != "mvccvbr" ] && [ "$2" != "lbundle" ] ; then return 1 ; fi
+    if [ "$2" != "vbrunsafe" ] && [ "$2" != "unsafe" ] && [ "$2" != "lockfree" ] && [ "$2" != "vcas" ] && [ "$2" != "mvccvbr" ] && [ "$2" != "lbundle" ] ; then return 1 ; fi
     return 0
 }
 export -f check_ds_technique

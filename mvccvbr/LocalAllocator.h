@@ -6,7 +6,7 @@
 #include "Allocator.h"
 
 
-#define DEFAULT_ALLOC_CACHES 5
+#define DEFAULT_ALLOC_CACHES 2
 #define DEFAULT_FREE_CACHES 1
 
 #define DEFAULT_LIFE_CYCLE 2
@@ -80,7 +80,7 @@ class LocalAllocator {
         while (allocCachesHead != nullptr) {
           if (allocCachesHead->isEmpty()) {
             tmp = allocCachesHead->getNext();
-          
+            delete allocCachesHead;
             
             allocCachesHead = tmp;
             if (allocCachesHead != nullptr) {
@@ -149,6 +149,8 @@ class LocalAllocator {
         tmp = freeCaches->getNext();
         if (freeCaches->isEmpty() == false) {
           global->pushAllocCache(freeCaches);
+        } else {
+          delete freeCaches;
         }
         freeCaches = tmp;
       }

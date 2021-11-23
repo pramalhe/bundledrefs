@@ -82,6 +82,7 @@ LDFLAGS += -I../vcas_lockfree_list
 
 # mvccvbr specific includes
 LDFLAGS += -I../mvccvbr
+LDFLAGS += -I../unsafe_vbr
 # -------------------------
 
 # Unsafe specific includes.
@@ -236,18 +237,24 @@ tree.rq_lockfree:
 .PHONY: unsafe skiplist.rq_unsafe tree.rq_unsafe list.rq_unsafe
 unsafe: skiplist.rq_unsafe tree.rq_unsafe list.rq_unsafe
 list.rq_unsafe:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DLFLIST -DRQ_UNSAFE $(pinning) $(thispath)main.cpp $(LDFLAGS)
+	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DUNSAFE_LIST $(pinning) $(thispath)main.cpp $(LDFLAGS)
 skiplist.rq_unsafe:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DLFSKIPLIST -DRQ_UNSAFE $(pinning) $(thispath)main.cpp $(LDFLAGS)
+	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DUNSAFE_SKIPLIST $(pinning) $(thispath)main.cpp $(LDFLAGS)
 tree.rq_unsafe:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DBST -DRQ_UNSAFE $(pinning) $(thispath)main.cpp $(LDFLAGS)
+	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DUNSAFE_CITRUS $(pinning) $(thispath)main.cpp $(LDFLAGS)
+ 
+.PHONY: vbrunsafe skiplist.rq_vbrunsafe tree.rq_vbrunsafe list.rq_vbrunsafe
+vbrunsafe: skiplist.rq_vbrunsafe tree.rq_vbrunsafe list.rq_vbrunsafe
+list.rq_vbrunsafe:
+	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DVBR_UNSAFE_LIST $(pinning) $(thispath)main.cpp $(LDFLAGS)
+
 
 .PHONY: mvccvbr skiplist.rq_mvccvbr tree.rq_mvccvbr list.rq_mvccvbr
 mvccvbr: skiplist.rq_mvccvbr tree.rq_mvccvbr list.rq_mvccvbr
-#skiplist.rq_mvccvbr:
-#	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DMVCC_VBR_SKIPLIST $(pinning) $(thispath)main.cpp $(LDFLAGS)
-#tree.rq_mvccvbr:
-#	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DMVCC_VBR_TREE $(pinning) $(thispath)main.cpp $(LDFLAGS)
+skiplist.rq_mvccvbr:
+	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DMVCC_VBR_SKIPLIST $(pinning) $(thispath)main.cpp $(LDFLAGS)
+tree.rq_mvccvbr:
+	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DMVCC_VBR_TREE $(pinning) $(thispath)main.cpp $(LDFLAGS)
 list.rq_mvccvbr:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DMVCC_VBR_LIST $(pinning) $(thispath)main.cpp $(LDFLAGS)
  
