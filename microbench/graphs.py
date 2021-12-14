@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 try:
     plt.style.use('ggplot')
 except:
-    print "Matplotlib version " + mpl.__version__ + " does not support style argument"
+    print("Matplotlib version " + mpl.__version__ + " does not support style argument")
 import sys
 import math
 
@@ -20,7 +20,7 @@ clean = 0
 if "-clean" in sys.argv:
     clean = 1
 
-print "Generating graphs using Matplotlib version " + mpl.__version__ + "and Pandas version " + pd.__version__
+print("Generating graphs using Matplotlib version " + mpl.__version__ + "and Pandas version " + pd.__version__)
 if clean: 
     font = {'weight' : 'normal',
             'size'   : 26}
@@ -33,8 +33,8 @@ rcParams.update({'figure.autolayout': True})
 DB_FILENAME = "results.db"
 
 if not os.path.isfile(DB_FILENAME):
-    print "Database file '" + DB_FILENAME + "' does not exist!"
-    print "Run python create_db.py first."
+    print("Database file '" + DB_FILENAME + "' does not exist!")
+    print("Run python create_db.py first.")
     exit()
 
 class StdevFunc:
@@ -184,7 +184,7 @@ maxrqthreads = check_output('cat ../config.mk | grep "maxrqthreads=" | cut -d"="
 maxrqthreads = maxrqthreads.strip()
 
 
-print "generating graphs for EXPERIMENT 1 IMPACT OF INCREASING UPDATE THREAD COUNT ... "
+print("generating graphs for EXPERIMENT 1 IMPACT OF INCREASING UPDATE THREAD COUNT ... ")
 
 updates = ["0"]
 rq="0"
@@ -192,7 +192,7 @@ rqsize="1000"
 nrq="0"
 key_ranges = ["10000", "1000000"]
 for ds in datastructures:
-    print "generating graphs for " + ds + " ..."
+    print("generating graphs for " + ds + " ...")
     for k in key_ranges:
         for u in updates:
             if not is_valid_key_range(ds,k): continue
@@ -218,5 +218,5 @@ for ds in datastructures:
 
 
 
-print "Generated " + str(count) + " graphs"
+print("Generated " + str(count) + " graphs")
 conn.close()
