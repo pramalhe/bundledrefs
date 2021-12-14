@@ -785,10 +785,10 @@ using namespace vcas_lazylist;
 /*--------------------------------------------------------------------------*/ 
 #elif defined(MVCC_VBR_SKIPLIST)
 #include "record_manager.h"
-#include "mvccvbr_skiplist.h"
+#include "mvccvbr_list.h"
 //using namespace mvcc_vbr;
 
-#define DS_DECLARATION mvccvbr_skiplist<test_type, test_type, MEMMGMT_T>
+#define DS_DECLARATION mvccvbr_list<test_type, test_type, MEMMGMT_T>
 #define MEMMGMT_T record_manager<RECLAIM, ALLOC, POOL, DirectCTSNode<test_type, test_type>>
 #define DS_CONSTRUCTOR new DS_DECLARATION(TOTAL_THREADS, KEY_MIN, KEY_MAX, NO_VALUE)
 
@@ -806,10 +806,10 @@ using namespace vcas_lazylist;
 /*--------------------------------------------------------------------------*/ 
 #elif defined(MVCC_VBR_TREE)
 #include "record_manager.h"
-#include "mvccvbr_tree.h"
+#include "mvccvbr_list.h"
 //using namespace mvcc_vbr;
 
-#define DS_DECLARATION mvccvbr_tree<test_type, test_type, MEMMGMT_T>
+#define DS_DECLARATION mvccvbr_list<test_type, test_type, MEMMGMT_T>
 #define MEMMGMT_T record_manager<RECLAIM, ALLOC, POOL, DirectCTSNode<test_type, test_type>>
 #define DS_CONSTRUCTOR new DS_DECLARATION(TOTAL_THREADS, KEY_MIN, KEY_MAX, NO_VALUE)
 

@@ -17,8 +17,8 @@ template <typename K, typename V>
 class DirectCTSNode {  
   public:
 
-    K key;
-    V value;
+    std::atomic<K> key;
+    std::atomic<V> value;
     std::atomic<DirectCTSNode *> nextV;
     std::atomic<DirectCTSNode *> next;
     std::atomic<uint64_t> ts;
@@ -27,7 +27,13 @@ class DirectCTSNode {
     DirectCTSNode(K key, V value, DirectCTSNode *next, DirectCTSNode *nextV, uint64_t ts) : key(key), value(value), next(next), nextV(nextV), ts(ts) {}
     
     uint64_t getTS() {
-      return ts;
+      uint64_t tmp = ts.load(std::memory_order_acq_rel);
+      return tmp;
+    }
+    
+    K getKey() {
+      K tmp = key.load(std::memory_order_acq_rel);
+      return tmp;
     }
     
     void setTS(uint64_t newTs) {
@@ -86,7 +92,7 @@ class DirectCTSNode {
     bool flag(uint64_t expTS) {
       
       DirectCTSNode *succ = next;
-      if (ts != expTS) return false;
+      if (getTS() != expTS) return false;
       if (isMarkedPtr(succ) || isFlaggedPtr(succ)) return false;
       DirectCTSNode *flaggedSucc = (DirectCTSNode *)((uintptr_t)(succ) | FLAG_MASK);
       

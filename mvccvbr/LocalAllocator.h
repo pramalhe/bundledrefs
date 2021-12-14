@@ -99,8 +99,9 @@ class LocalAllocator {
         allocCachesTail = nullptr;
         for (int i = 0; i < DEFAULT_ALLOC_CACHES; i++) {
           tmp = this->global->popAllocCache(); 
-          if (tmp == nullptr)
-            break;
+          assert(tmp != nullptr);
+          //if (tmp == nullptr)
+            //break;
           tmp->setNext(allocCachesHead);
           if (allocCachesTail == nullptr)
             allocCachesTail = tmp;         

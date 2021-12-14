@@ -7,7 +7,7 @@
 
 #define PADDING_BYTES 192
 
-#define HEAP_SIZE (64 * 128 * 1024 * 1024L)
+#define OBJECTS_IN_POOL (64 * 1024 * 1024L)
 
 class Allocator {  
   private:
@@ -34,12 +34,12 @@ class Allocator {
       AllocCache *currAllocCache;
       head = nullptr;
       
-    
-      heap = (void *)malloc(HEAP_SIZE);
+      size_t heapSize = objectSize * OBJECTS_IN_POOL;
+      heap = (void *)malloc(heapSize);
       char *currHeap = (char *)heap;
-      memset(currHeap, 0, HEAP_SIZE);
+      memset(currHeap, 0, heapSize);
       numCaches = 0;
-      while (currHeap + ENTRIES_PER_CACHE * this->objectSize <= ((char *)heap) + HEAP_SIZE) {
+      while (currHeap + ENTRIES_PER_CACHE * this->objectSize <= ((char *)heap) + heapSize) {
         currAllocCache = new AllocCache(head, this->objectSize);
         currAllocCache->allocEntries(currHeap);
         head = currAllocCache;
@@ -82,7 +82,8 @@ class Allocator {
         }
         currHead = head;
       }
-      currHead->setNext(nullptr);
+      if (currHead != nullptr)
+        currHead->setNext(nullptr);
       return currHead;
     }
     
