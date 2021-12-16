@@ -6,7 +6,7 @@
 #include "Allocator.h"
 
 
-#define DEFAULT_ALLOC_CACHES 2
+#define DEFAULT_ALLOC_CACHES 10
 #define DEFAULT_FREE_CACHES 1
 
 #define DEFAULT_LIFE_CYCLE 2
@@ -16,7 +16,8 @@ class LocalAllocator {
 
   private:
   	Allocator *global;
-    AllocCache *freeCaches;
+    AllocCache *freeCachesHead;
+    AllocCache *freeCachesTail;
   	AllocCache *allocCachesHead; 
     AllocCache *allocCachesTail;
     size_t objectSize;
@@ -60,10 +61,13 @@ class LocalAllocator {
       }
       
       // initializing the free caches
-      freeCaches = nullptr;
+      freeCachesHead = nullptr;
+      freeCachesTail = nullptr;
       for (int i = 0; i < DEFAULT_FREE_CACHES; i++) {
-        tmp = new AllocCache(freeCaches, objectSize); 
-        freeCaches = tmp;
+        tmp = new AllocCache(freeCachesHead, objectSize); 
+        if (freeCachesTail == nullptr)
+          freeCachesTail = tmp;
+        freeCachesHead = tmp;
       }    
     }
 
@@ -80,8 +84,15 @@ class LocalAllocator {
         while (allocCachesHead != nullptr) {
           if (allocCachesHead->isEmpty()) {
             tmp = allocCachesHead->getNext();
-            delete allocCachesHead;
-            
+
+            allocCachesHead->setNext(nullptr);
+            if (freeCachesHead == nullptr) {
+              freeCachesHead = allocCachesHead;              
+            } else {
+              freeCachesTail->setNext(allocCachesHead);              
+            }
+            freeCachesTail = allocCachesHead;
+
             allocCachesHead = tmp;
             if (allocCachesHead != nullptr) {
               uint64_t maxEpoch = allocCachesHead->getMaxEpoch();
@@ -114,25 +125,25 @@ class LocalAllocator {
     void retire(void *obj) {
       AllocCache *tmp;
       
-      while (freeCaches != nullptr) {
-        if (freeCaches->isFull()) {
-          tmp = freeCaches->getNext();
+      while (freeCachesHead != nullptr) {
+        if (freeCachesHead->isFull()) {
+          tmp = freeCachesHead->getNext();
           
-          global->pushAllocCache(freeCaches);
-          //freeCaches->setNext(nullptr);
-          //allocCachesTail->setNext(freeCaches);
-          //allocCachesTail = allocCachesTail->getNext();
+          global->pushAllocCache(freeCachesHead);
           
-          freeCaches = tmp;
+          freeCachesHead = tmp;
         } else {
-          freeCaches->addEntry(obj, getEpoch());
+          freeCachesHead->addEntry(obj, getEpoch());
           return;
         }
       }
       
+      freeCachesTail = nullptr;
       for (int i = 0; i < DEFAULT_FREE_CACHES; i++) {
-        tmp = new AllocCache(freeCaches, objectSize); 
-        freeCaches = tmp;
+        tmp = new AllocCache(freeCachesHead, objectSize); 
+        if (freeCachesTail == nullptr)
+          freeCachesTail = tmp;
+        freeCachesHead = tmp;
       }
     }
         
@@ -146,14 +157,14 @@ class LocalAllocator {
     void returnAllocCaches() {
       AllocCache *tmp;
       
-      while (freeCaches != nullptr) {
-        tmp = freeCaches->getNext();
-        if (freeCaches->isEmpty() == false) {
-          global->pushAllocCache(freeCaches);
+      while (freeCachesHead != nullptr) {
+        tmp = freeCachesHead->getNext();
+        if (freeCachesHead->isEmpty() == false) {
+          global->pushAllocCache(freeCachesHead);
         } else {
-          delete freeCaches;
+          delete freeCachesHead;
         }
-        freeCaches = tmp;
+        freeCachesHead = tmp;
       }
 
       while (allocCachesHead != nullptr) {

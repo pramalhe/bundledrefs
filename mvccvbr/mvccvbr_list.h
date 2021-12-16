@@ -69,7 +69,7 @@ private:
 	  }
      
     inline uint64_t getTsEpoch(){
-      return tsEpoch.load();
+      return tsEpoch.load(std::memory_order_acq_rel);
 	  }
      
     uint64_t incrementTsEpoch(uint64_t expEpoch){
@@ -128,9 +128,10 @@ private:
       return (birthEpoch <= currEpoch);
     }
     
-    inline uint64_t updateTS(DirectCTSNode<K,V> *ptr) {
-      uint64_t oldTS = ptr->ts;
-      if (isValidTS(oldTS) == false || isPending(oldTS) == false) return oldTS;
+    inline uint64_t updateTS(DirectCTSNode<K,V> *ptr, uint64_t expTS) {
+  
+      uint64_t oldTS = ptr->getTS();      
+      if (oldTS != expTS || isValidTS(oldTS) == false || isPending(oldTS) == false) return oldTS;
       uint64_t newTS = (oldTS & ~TS_MASK);
       uint64_t currTsEpoch = getTsEpoch();
       newTS = (newTS | currTsEpoch);
@@ -150,9 +151,10 @@ private:
       currEpoch = getReclamationEpoch();
     }
     
-    inline bool mark(DirectCTSNode<K,V> *victim) {
+    inline bool mark(DirectCTSNode<K,V> *victim, uint64_t expTS) {
       DirectCTSNode<K,V> *succ = victim->next;
-      if (isValidTS(victim->ts) == false) return false;
+      uint64_t victimTS = victim->getTS();
+      if (victimTS != expTS) return false;
       if (isMarked(succ) || isFlagged(succ)) return false;
       DirectCTSNode<K,V> *markedSucc = (DirectCTSNode<K,V> *)((uintptr_t)(succ) | MARK_MASK);
       
@@ -196,12 +198,12 @@ public:
         
         DirectCTSNode<K,V> *tail = (DirectCTSNode<K,V> *)localAllocator->alloc();
         initDirectCTSNode(tail, KEY_MAX, NO_VALUE, nullptr, nullptr);
-        updateTS(tail);
+        updateTS(tail, tail->getTS());
         
                        
         head = (DirectCTSNode<K,V> *)localAllocator->alloc();
         initDirectCTSNode(head, KEY_MIN, NO_VALUE, tail, nullptr);
-        updateTS(head);
+        updateTS(head, head->getTS());
 #if defined(MVCC_VBR_SKIPLIST)        
         index->init(head, tail);
 #elif defined(MVCC_VBR_TREE)
@@ -243,7 +245,7 @@ public:
       if (ptr == nullptr)
         return nullptr;
       
-      if (getSnapshotTs(expTS) <= snapshotTS) {
+      if (!isPending(expTS) && getSnapshotTs(expTS) <= snapshotTS) {
         *outputExpTS = expTS;
         return ptr;
       }
@@ -259,7 +261,7 @@ public:
        
       currKey = curr->getKey();  
       currTS = curr->getTS();
-      if (isPending(currTS) || getReclamationEpochFromTs(currTS) > predNextVVersion) {
+      if (isPending(currTS) || getReclamationEpochFromTs(currTS) > predNextVVersion || getSnapshotTs(currTS) > getSnapshotTs(predTS)) {
         return nullptr;
       }
     
@@ -275,7 +277,7 @@ public:
         
         currKey = curr->getKey(); 
         currTS = curr->getTS();
-        if (isPending(currTS) || getReclamationEpochFromTs(currTS) > predNextVVersion)
+        if (isPending(currTS) || getReclamationEpochFromTs(currTS) > predNextVVersion || getSnapshotTs(currTS) > getSnapshotTs(predTS))
           return nullptr;        
    
       }
@@ -285,8 +287,8 @@ public:
     
     DirectCTSNode<K,V> *getNextV(DirectCTSNode<K,V> *pred, uint64_t snapshotTS, uint64_t expPredTS, uint64_t *outputExpTS) {
       
-      DirectCTSNode<K,V> *curr, *currNextV, *predNextRaw;
-      uint64_t predVersion, currTS, tmp, predTS, expCurrTS;
+      DirectCTSNode<K,V> *curr, *currNextV, *predNextRaw, *origCurrNextRaw;
+      uint64_t predVersion, currTS, origCurrTS, tmp, predTS, expCurrTS;
       K predKey = pred->getKey(), currKey;
 
       predNextRaw = pred->next;
@@ -296,26 +298,41 @@ public:
       if (curr == nullptr || predTS != expPredTS)
         return nullptr;
       currKey = curr->getKey();
-
+      origCurrNextRaw = curr->next;
       currTS = curr->getTS();
       if (getReclamationEpochFromTs(currTS) > predVersion)
         return nullptr;
       
-      if (isPending(currTS)) {
-        currTS = updateTS(curr);
-        return nullptr;
-      }
+      //if (isPending(currTS)) {
+        //currTS = updateTS(curr, currTS);
+        //return nullptr;
+      //}
       
-      if (getSnapshotTs(currTS) <= snapshotTS) {
+      if (!isPending(currTS) && getSnapshotTs(currTS) <= snapshotTS) {
         *outputExpTS = currTS;
         return curr;
       }
+      
+      origCurrTS = currTS;
       curr = readVersion(curr, snapshotTS, currTS, &expCurrTS);
       if (curr == nullptr)
         return nullptr;
       currKey = curr->getKey();
       currTS = curr->getTS();
-      if (currTS != expCurrTS /*|| currKey <= predKey*/)
+      /*
+      if (currKey <= predKey && currTS == expCurrTS) {
+        cout << "currKey = " << currKey << ", predKey = " << predKey << ". currEpoch = " << currEpoch << ", currReclamationEpoch = " << getReclamationEpochFromTs(currTS) << ", predReclamationEpoch = " << getReclamationEpochFromTs(predTS) << ", origCurrReclamationEpoch = " << getReclamationEpochFromTs(origCurrTS) << endl;
+        cout << "snapshotTS = " << snapshotTS << ", currTS = " << getSnapshotTs(currTS) << ", predTS = " << getSnapshotTs(predTS) << ", origCurrTS = " << getSnapshotTs(origCurrTS) << endl;
+        if (isMarked(predNextRaw) || isFlagged(predNextRaw))
+          cout << "pred is marked." << endl;
+        if (isMarked(origCurrNextRaw) || isFlagged(origCurrNextRaw))
+          cout << "origCurr is marked." << endl;
+          
+        currTS = currEpoch / 0;
+      }
+      */
+      
+      if (currTS != expCurrTS || currKey <= predKey)
         return nullptr;
       
       *outputExpTS = expCurrTS;
@@ -326,39 +343,49 @@ public:
     // curr is assumed to be marked
     DirectCTSNode<K,V> *trim(DirectCTSNode<K,V> *pred, DirectCTSNode<K,V> *curr, uint64_t predVersion) {
 
-      DirectCTSNode<K,V> *deleted, *deletedNext, *output, *origNextV, *optimizedNextV, *succNext, *currNextV, *predNext, *currNext;
-      uint64_t succTS, succTagTS, succNextTS, currTS, updateEpoch, tmp;
+      DirectCTSNode<K,V> *deleted, *deletedNext, *output, *origNextV, *optimizedNextV, *succNextRaw, *currNextV, *predNext, *currNextRaw, *succ, *succNext;
+      uint64_t succTS, succTagTS, succNextTS, currTS, updateEpoch, tmp, predTS, currNextVersion, succNextVersion, tmpTS;
       K succKey, predKey;
       
       predKey = pred->key;
       predNext = pred->next;
+      predTS = pred->getTS();
       
-      if (isValidTS(pred->getTS()) == false || getDirectCTSNode(predNext) != curr || getVersion(predNext) != predVersion || isMarked(predNext) || isFlagged(predNext))
+      if (getReclamationEpochFromTs(predTS) > predVersion || getDirectCTSNode(predNext) != curr || getVersion(predNext) != predVersion || isMarked(predNext) || isFlagged(predNext))
         return nullptr;
 
-      currNext = curr->next;
-      if (!isMarked(currNext) || isValidTS(curr->getTS()) == false) 
+      currNextRaw = curr->next;
+      currTS = curr->getTS();
+      if (!isMarked(currNextRaw) || getReclamationEpochFromTs(currTS) > predVersion) 
         return nullptr;
+      currNextVersion = getVersion(currNextRaw);
+      succ = getDirectCTSNode(currNextRaw);
       
-      DirectCTSNode<K,V> *succ = getDirectCTSNode(currNext);
-      succNext = succ->next; 
+      
+      succNextRaw = succ->next; 
       succTS = succ->getTS();
-      if (isValidTS(succTS) == false) 
-        return nullptr;     
+      if (isValidTS(succTS) == false || getReclamationEpochFromTs(succTS) > currNextVersion) 
+        return nullptr;
+      succNextVersion = getVersion(succNextRaw);     
       
-      while (isMarked(succNext)) {
-        succ = getDirectCTSNode(succNext);
-        succNext = succ->next;
+      while (isMarked(succNextRaw)) {
+        succ = getDirectCTSNode(succNextRaw);
+        succNextRaw = succ->next;
         succTS = succ->getTS();
-        if (isValidTS(succTS) == false) 
+        if (isValidTS(succTS) == false || getReclamationEpochFromTs(succTS) > succNextVersion) 
           return nullptr;
-      }     
+        succNextVersion = getVersion(succNextRaw); 
+      } 
+      
+      if (predNext != pred->next)  
+        return nullptr; 
 
       if (isPending(succTS)) {
-        //readGlobalReclamationEpoch();
-        succTS = updateTS(succ);
-        if (isValidTS(succTS) == false || pred->next != predNext)
+
+        tmpTS = updateTS(succ, succTS);
+        if (getReclamationEpochFromTs(succTS) != getReclamationEpochFromTs(tmpTS)  || pred->next != predNext)
           return nullptr;
+        succTS = tmpTS;
       }     
       
       if (succ->flag(succTS) == false && (succ->isFlagged() == false || succ->getTS() != succTS)) 
@@ -366,31 +393,62 @@ public:
       
       // preparing the new node
       // to be inserted instead of the flagged one
-      succNext = succ->getNext();
+      succNextRaw = succ->next;
       succKey = succ->getKey();
+      if (succ->getTS() != succTS || pred->next != predNext)
+        return nullptr;
+      succNext = getDirectCTSNode(succNextRaw);
+      succNextVersion = getVersion(succNextRaw);
       if (succNext != nullptr) {
-        succNextTS = succNext->getTS();        
+        succNextTS = succNext->getTS();  
+        if (getReclamationEpochFromTs(succNextTS) > succNextVersion) 
+          return nullptr;     
         if (isPending(succNextTS)) {
-          succNextTS = updateTS(succNext);
-          if (isValidTS(succNextTS) == false)
+
+          tmpTS = updateTS(succNext, succNextTS);
+          if (getReclamationEpochFromTs(succNextTS) != getReclamationEpochFromTs(tmpTS))
             return nullptr;
+          succNextTS = tmpTS;
         } 
       }       
       
       DirectCTSNode<K,V> *succTag = (DirectCTSNode<K,V> *)localAllocator->alloc();
       initDirectCTSNode(succTag, succKey, succ->value, succNext, curr);
+      succTagTS = succTag->getTS();
+      
+      //if (!isPending(succTagTS)) currEpoch = succTS / 0;
       
       if (pred->updateNext(predNext, integrateEpochIntoPointer(currEpoch, succTag))) {
-
+/*
+        if (getSnapshotTs(currTS) > getSnapshotTs(predTS)) {
+          currNextRaw = curr->nextV;
+          currNextV = getDirectCTSNode(currNextRaw);
+          if (currNextV != nullptr) {
+            succKey = currNextV->getKey();
+            succTS = currNextV->getTS();
+            if (getReclamationEpochFromTs(succTS) <= getReclamationEpochFromTs(currTS) && getReclamationEpochFromTs(succTS) <= getVersion(currNextRaw) && !isPending(currTS) && succKey < predKey && getSnapshotTs(succTS) > getSnapshotTs(predTS) && getSnapshotTs(succTS) > getSnapshotTs(currTS)) currEpoch = succTS / 0;
+          }
+        }
+*/
+     
         updateEpoch = currEpoch;        
-        succTagTS = updateTS(succTag);
-        
+        succTagTS = updateTS(succTag, succTagTS);
+/*        
+        if (getReclamationEpochFromTs(succTagTS) <= updateEpoch) {
+          currNextV = getDirectCTSNode(succTag->nextV);
+          if (currNextV != nullptr) {
+            succKey = currNextV->getKey();
+            succTS = currNextV->getTS();
+            if (getReclamationEpochFromTs(succTS) <= getReclamationEpochFromTs(succTagTS) && !isPending(succTagTS) && succKey < predKey && getSnapshotTs(succTS) > getSnapshotTs(predTS) && getSnapshotTs(succTS) > getSnapshotTs(succTagTS)) currEpoch = succTS / 0;
+          }
+        }
+*/        
         
 #if defined(MVCC_VBR_SKIPLIST)
-          if (isPending(succTagTS) == false) 
+          if (getReclamationEpochFromTs(succTagTS) <= updateEpoch) 
             index->insert(succTag, succTagTS);
 #elif defined(MVCC_VBR_TREE)
-          if (isPending(succTagTS) == false) 
+          if (getReclamationEpochFromTs(succTagTS) <= updateEpoch) 
             treeIndex->insert(succTag, succTagTS);
 #endif
         
@@ -421,7 +479,7 @@ public:
 
     DirectCTSNode<K,V> *find(K key, DirectCTSNode<K,V> **predPtr, uint64_t *predVersion, K *outputCurrKey) {
       DirectCTSNode<K,V> *pred, *predNext, *predNextRaw, *curr, *currNext, *currNextRaw;
-      uint64_t version, tmpEpoch;
+      uint64_t version, tmpEpoch, predTS, currTS, currNextVersion, tmpTS;
       K tmpKey = key, predKey, currKey, lessKey;
       DirectCTSNode<K,V> *tmp;
       int attemptsCounter;
@@ -435,6 +493,7 @@ public:
 #if defined(MVCC_VBR_LIST)
         pred = head;
         predNextRaw = pred->next;
+        predTS = pred->getTS();
 #elif defined(MVCC_VBR_SKIPLIST)
 
         
@@ -449,7 +508,8 @@ public:
           predKey = pred->getKey();
           predNextRaw = pred->next;
           attemptsCounter++;
-          if (isValidTS(pred->getTS()) == false) {
+          predTS = pred->getTS();
+          if (isValidTS(predTS) == false) {
             goto try_again;
           }
           if (predKey >= key) {
@@ -477,7 +537,8 @@ public:
           assert(tmpKey < key || lessKey < tmpKey);
           predNextRaw = pred->next;
           attemptsCounter++;
-          if (isValidTS(pred->getTS()) == false) {
+          predTS = pred->getTS();
+          if (isValidTS(predTS) == false) {
             goto try_again;
           }
           if (tmpKey >= key || isMarked(predNextRaw) || isFlagged(predNextRaw)) {
@@ -491,50 +552,63 @@ public:
        
         predNext = getDirectCTSNode(predNextRaw);
         version = getVersion(predNextRaw);
+        
         curr = predNext;
+        currNextRaw = curr->next;
+        currKey = curr->getKey();                
+        currTS = curr->getTS();
+        if (isValidVersion(version) == false || isValidTS(currTS) == false || getReclamationEpochFromTs(currTS) > version)
+          goto try_again;
+        currNextVersion = getVersion(currNextRaw);
         
         while (true) {
 
-          while (isMarked(curr->next) || isFlagged(curr->next)) {
-            currNext = curr->getNext();
-            if (isValidTS(curr->getTS()) == false) {
-              goto try_again;
-            }
+          while (isMarked(currNextRaw) || isFlagged(currNextRaw)) {
+            currNext = getDirectCTSNode(currNextRaw);
+            if (currNext == nullptr)
+              break;
             curr = currNext;
-          }
-          
-          currKey = curr->getKey();
-          if (isValidTS(curr->getTS()) == false) {
-            goto try_again;
+            currNextRaw = curr->next;
+            currKey = curr->getKey();
+            currTS = curr->getTS();
+            if (isValidTS(currTS) == false || getReclamationEpochFromTs(currTS) > currNextVersion)
+              goto try_again;
+            currNextVersion = getVersion(currNextRaw);
           }
           
           if (currKey >= key) {
-            if (isPending(pred->getTS())) {
-              if (isValidTS(updateTS(pred)) == false){
+            if (isPending(predTS)) {
+
+              tmpTS = updateTS(pred, predTS);
+              if (getReclamationEpochFromTs(predTS) != getReclamationEpochFromTs(tmpTS)){
                 goto try_again;
               }
+              predTS = tmpTS;
             }
             break;
-          //} else if (isFlagged(curr->next)) {
-            //currNext = curr->getNext();
-            //if (isValidTS(curr->getTS()) == false) {
-              //goto try_again;
-            //}
-            //curr = currNext;
-            //continue;
           } else {
           
             pred = curr;
-            predKey = pred->getKey();
+            predKey = currKey;
             predNextRaw = pred->next;
+            predTS = pred->getTS();
             predNext = getDirectCTSNode(predNextRaw);
             version = getVersion(predNextRaw);
-            if (isValidTS(pred->getTS()) == false || isValidVersion(version) == false || isMarked(predNextRaw) || isFlagged(predNextRaw)) {
+            if (predTS != currTS || isValidVersion(version) == false || isMarked(predNextRaw) || isFlagged(predNextRaw)) {
               goto try_again;
             }
             curr = predNext;
+            currNextRaw = curr->next;
+            currKey = curr->getKey();                
+            currTS = curr->getTS();
+            if (isValidVersion(version) == false || isValidTS(currTS) == false || getReclamationEpochFromTs(currTS) > version)
+              goto try_again;
+            currNextVersion = getVersion(currNextRaw);
           }
         }
+        
+        if (pred->next != predNextRaw)
+          goto try_again;
         
         
         if (predNext != curr) {
@@ -545,15 +619,19 @@ public:
           curr = getDirectCTSNode(tmp);
           version = getVersion(tmp);
           currKey = curr->getKey();
-          if (pred->next != tmp || currKey < key || isValidTS(curr->getTS()) == false) {
+          currTS = curr->getTS();
+          if (pred->next != tmp || currKey < key || getReclamationEpochFromTs(currTS) > version) {
             goto try_again;
           }
         }
         
-        if (isPending(curr->getTS())) {
-          if (isValidTS(updateTS(curr)) == false) {
+        if (isPending(currTS)) {
+
+          tmpTS = updateTS(curr, currTS);
+          if (getReclamationEpochFromTs(currTS) != getReclamationEpochFromTs(tmpTS)) {
             goto try_again;
           } 
+          currTS = tmpTS;
         }         
 
         
@@ -573,10 +651,10 @@ public:
 
   public:
 
-    V insert(const int tid, const K& key, const V& value) { //galiinsert
+    V insert(const int tid, const K& key, const V& value) { 
       
       DirectCTSNode<K,V> *pred, *curr, *next, *predNext;
-      uint64_t predVersion, newNodeTS, initEpoch;
+      uint64_t predVersion, newNodeTS, initEpoch, currTS, predTS;
       K currKey, predKey;
       
       
@@ -584,27 +662,29 @@ public:
         curr = find(key, &pred, &predVersion, &currKey);
         if (currKey == key) {
           V result = curr->value;
-          if (isValidTS(curr->getTS()) == false)
+          currTS = curr->getTS();
+          if (getReclamationEpochFromTs(currTS) > predVersion)
             continue;
           return result;
         } 
         
         predNext = pred->next;
         predKey = pred->getKey();
-        if (isValidTS(pred->getTS()) == false || getVersion(predNext) != predVersion || getDirectCTSNode(predNext) != curr || isMarked(predNext) || isFlagged(predNext))
+        predTS = pred->getTS();
+        if (getReclamationEpochFromTs(predTS) > predVersion || getVersion(predNext) != predVersion || getDirectCTSNode(predNext) != curr || isMarked(predNext) || isFlagged(predNext))
           continue;
         
         DirectCTSNode<K,V> *newNode = (DirectCTSNode<K,V> *)localAllocator->alloc();
         initDirectCTSNode(newNode, key, value, curr, curr);
-         
+        newNodeTS = newNode->getTS();
                  
         if (pred->updateNext(predNext, integrateEpochIntoPointer(currEpoch, newNode))) {
-          newNodeTS = updateTS(newNode);
+          newNodeTS = updateTS(newNode, newNodeTS);
 #if defined(MVCC_VBR_SKIPLIST)
-          if (isValidTS(newNodeTS) == true) 
+          if (getReclamationEpochFromTs(newNodeTS) == currEpoch) 
             index->insert(newNode, newNodeTS);
 #elif defined(MVCC_VBR_TREE)
-          if (isValidTS(newNodeTS) == true) 
+          if (getReclamationEpochFromTs(newNodeTS) == currEpoch) 
             treeIndex->insert(newNode, newNodeTS);
 #endif
 
@@ -627,7 +707,7 @@ public:
     V erase(const int tid, const K& key) {
 
       DirectCTSNode<K,V> *pred, *curr;
-      uint64_t predVersion;
+      uint64_t predVersion, currTS;
       K currKey;
       V result;
 
@@ -635,10 +715,11 @@ public:
       while (true) {
         result = NO_VALUE;
         curr = find(key, &pred, &predVersion, &currKey);
-        //if (pred->next != integrateEpochIntoPointer(predVersion, curr)) continue;
         if (currKey != key) return result;  
         result = curr->value; 
-        if (mark(curr) == false) continue; // sets the remover identity
+        currTS = curr->getTS();
+        if (getReclamationEpochFromTs(currTS) > predVersion) continue;
+        if (mark(curr, currTS) == false) continue; // sets the remover identity
         if (trim(pred, curr, predVersion) == nullptr) 
           find(key, &pred, &predVersion, &currKey); // linearization point = trim
         return result;     

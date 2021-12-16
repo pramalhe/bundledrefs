@@ -51,6 +51,13 @@ class Allocator {
     
     ~Allocator()  {
       free(heap);
+      
+      AllocCache *currHead = head;
+      while (currHead != nullptr) {
+        head = currHead->getNext();
+        delete currHead;
+        currHead = head;
+      }
     }
     
     uint64_t getEpoch(){
