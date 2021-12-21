@@ -414,7 +414,7 @@ void *thread_timed(void *_id) {
             }
         }
 
-#define ENABLE_STRESS_TEST_ABC
+//#define ENABLE_STRESS_TEST_ABC
 #if defined ENABLE_STRESS_TEST_ABC
         int udA = 0 + tid*32;
         int udB = 1 + tid*32;
