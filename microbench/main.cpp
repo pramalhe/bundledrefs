@@ -414,6 +414,36 @@ void *thread_timed(void *_id) {
             }
         }
 
+#define ENABLE_STRESS_TEST_ABC
+#if defined ENABLE_STRESS_TEST_ABC
+        int udA = 0 + tid*32;
+        int udB = 1 + tid*32;
+        int udC = 2 + tid*32;
+        //printf("keys are %d %d %d\n", udA, udB, udC);
+        if (!ds->FIND_FUNC(tid, udA)) assert(false);
+        if (!ds->FIND_FUNC(tid, udB)) assert(false);
+        if (!ds->FIND_FUNC(tid, udC)) assert(false);
+        if (ds->INSERT_FUNC(tid, udA, udA) != ds->NO_VALUE) assert(false);
+        if (ds->INSERT_FUNC(tid, udB, udB) != ds->NO_VALUE) assert(false);
+        if (ds->INSERT_FUNC(tid, udC, udC) != ds->NO_VALUE) assert(false);
+        if (ds->FIND_FUNC(tid, udA)) assert(false);
+        if (ds->FIND_FUNC(tid, udB)) assert(false);
+        if (ds->FIND_FUNC(tid, udC)) assert(false);
+        if (ds->INSERT_FUNC(tid, udA, udA) == ds->NO_VALUE) assert(false);
+        if (ds->INSERT_FUNC(tid, udB, udB) == ds->NO_VALUE) assert(false);
+        if (ds->INSERT_FUNC(tid, udC, udC) == ds->NO_VALUE) assert(false);
+        if (ds->ERASE_FUNC(tid, udA) != ds->NO_VALUE) assert(false);
+        if (ds->ERASE_FUNC(tid, udC) != ds->NO_VALUE) assert(false);
+        if (ds->ERASE_FUNC(tid, udB) != ds->NO_VALUE) assert(false);
+        if (!ds->FIND_FUNC(tid, udA)) assert(false);
+        if (!ds->FIND_FUNC(tid, udB)) assert(false);
+        if (!ds->FIND_FUNC(tid, udC)) assert(false);
+        if (ds->ERASE_FUNC(tid, udA) == ds->NO_VALUE) assert(false);
+        if (ds->ERASE_FUNC(tid, udB) == ds->NO_VALUE) assert(false);
+        if (ds->ERASE_FUNC(tid, udC) == ds->NO_VALUE) assert(false);
+
+#else
+
         VERBOSE if (cnt && ((cnt % 1000000) == 0))
             COUTATOMICTID("op# " << cnt << endl);
         int key = rng->nextNatural(MAXKEY);
@@ -458,7 +488,10 @@ void *thread_timed(void *_id) {
             GSTATS_ADD(tid, num_searches, 1);
         }
         GSTATS_ADD(tid, num_operations, 1);
+#endif // ENABLE_STRESS_TEST_ABC
+
     }
+
     glob.running.fetch_add(-1);
     while (glob.running.load()) { /* wait */
     }
