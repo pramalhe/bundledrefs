@@ -2,6 +2,8 @@
 #define MVCCVBR_LIST_H_
 
 #pragma once
+#include <atomic>
+#include <iostream>
 #include "errors.h"
 #include "DirectCTSNode.h"
 #include "LocalAllocator.h"
