@@ -9,6 +9,7 @@
 #include "LocalAllocator.h"
 
 #define INDEX_MAX_LEVEL (19)
+#define INDEX_FREQ 4
 
 __thread LocalAllocator *localIndexAllocator = nullptr;
 __thread unsigned int indexLevelSeed;
@@ -303,7 +304,7 @@ class Index
     bool insert(DirectCTSNode<K,V> *n, uint64_t nTS)
     {
        
-        if (n->key % 2 == 0) return false;
+        if (n->key % INDEX_FREQ == 0) return false;
         IndexNode *newIndexNode;
         IndexNode *preds[INDEX_MAX_LEVEL], *succs[INDEX_MAX_LEVEL];
         IndexNode *expNext, *newNext;
@@ -385,7 +386,7 @@ class Index
     bool remove(K key)
     {
 
-        if (key % 2 == 0) return false;
+        if (key % INDEX_FREQ == 0) return false;
         IndexNode *victim, *preds[INDEX_MAX_LEVEL], *succs[INDEX_MAX_LEVEL];
 
         if (find(key, preds, succs, 0) == false)

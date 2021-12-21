@@ -76,7 +76,7 @@ class LocalAllocator {
     
       void *ret;
       AllocCache *tmp;
-      uint64_t incEpochAmount;
+      uint64_t incEpochAmount, maxEpoch, currGlobalEpoch;
       
       
       while(true) {
@@ -95,8 +95,8 @@ class LocalAllocator {
 
             allocCachesHead = tmp;
             if (allocCachesHead != nullptr) {
-              uint64_t maxEpoch = allocCachesHead->getMaxEpoch();
-              uint64_t currGlobalEpoch = getEpoch();
+              maxEpoch = allocCachesHead->getMaxEpoch();
+              currGlobalEpoch = getEpoch();
               if (maxEpoch == currGlobalEpoch) {
                 incrementEpoch(currGlobalEpoch); 
               }
@@ -117,7 +117,13 @@ class LocalAllocator {
           if (allocCachesTail == nullptr)
             allocCachesTail = tmp;         
           allocCachesHead = tmp;
-        }       
+        } 
+        
+        maxEpoch = allocCachesHead->getMaxEpoch();
+        currGlobalEpoch = getEpoch();
+        if (maxEpoch == currGlobalEpoch) {
+          incrementEpoch(currGlobalEpoch); 
+        }      
       }    
     }
 
@@ -145,6 +151,7 @@ class LocalAllocator {
           freeCachesTail = tmp;
         freeCachesHead = tmp;
       }
+      freeCachesHead->addEntry(obj, getEpoch());
     }
         
     void returnAlloc(void *obj) {

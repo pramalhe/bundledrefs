@@ -21,6 +21,7 @@ class DirectCTSNode {
     std::atomic<V> value;
     std::atomic<DirectCTSNode *> nextV;
     std::atomic<DirectCTSNode *> next;
+    std::atomic<DirectCTSNode *> firstPred;
     std::atomic<uint64_t> ts;
     
     

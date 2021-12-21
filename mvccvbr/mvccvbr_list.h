@@ -319,20 +319,8 @@ public:
         return nullptr;
       currKey = curr->getKey();
       currTS = curr->getTS();
-      /*
-      if (currKey <= predKey && currTS == expCurrTS) {
-        cout << "currKey = " << currKey << ", predKey = " << predKey << ". currEpoch = " << currEpoch << ", currReclamationEpoch = " << getReclamationEpochFromTs(currTS) << ", predReclamationEpoch = " << getReclamationEpochFromTs(predTS) << ", origCurrReclamationEpoch = " << getReclamationEpochFromTs(origCurrTS) << endl;
-        cout << "snapshotTS = " << snapshotTS << ", currTS = " << getSnapshotTs(currTS) << ", predTS = " << getSnapshotTs(predTS) << ", origCurrTS = " << getSnapshotTs(origCurrTS) << endl;
-        if (isMarked(predNextRaw) || isFlagged(predNextRaw))
-          cout << "pred is marked." << endl;
-        if (isMarked(origCurrNextRaw) || isFlagged(origCurrNextRaw))
-          cout << "origCurr is marked." << endl;
-          
-        currTS = currEpoch / 0;
-      }
-      */
       
-      if (currTS != expCurrTS || currKey <= predKey)
+      if (currTS != expCurrTS)
         return nullptr;
       
       *outputExpTS = expCurrTS;
@@ -414,35 +402,15 @@ public:
       
       DirectCTSNode<K,V> *succTag = (DirectCTSNode<K,V> *)localAllocator->alloc();
       initDirectCTSNode(succTag, succKey, succ->value, succNext, curr);
+      succTag->firstPred.store(integrateEpochIntoPointer(currEpoch, pred), std::memory_order_acq_rel); 
       succTagTS = succTag->getTS();
       
-      //if (!isPending(succTagTS)) currEpoch = succTS / 0;
       
       if (pred->updateNext(predNext, integrateEpochIntoPointer(currEpoch, succTag))) {
-/*
-        if (getSnapshotTs(currTS) > getSnapshotTs(predTS)) {
-          currNextRaw = curr->nextV;
-          currNextV = getDirectCTSNode(currNextRaw);
-          if (currNextV != nullptr) {
-            succKey = currNextV->getKey();
-            succTS = currNextV->getTS();
-            if (getReclamationEpochFromTs(succTS) <= getReclamationEpochFromTs(currTS) && getReclamationEpochFromTs(succTS) <= getVersion(currNextRaw) && !isPending(currTS) && succKey < predKey && getSnapshotTs(succTS) > getSnapshotTs(predTS) && getSnapshotTs(succTS) > getSnapshotTs(currTS)) currEpoch = succTS / 0;
-          }
-        }
-*/
      
         updateEpoch = currEpoch;        
         succTagTS = updateTS(succTag, succTagTS);
-/*        
-        if (getReclamationEpochFromTs(succTagTS) <= updateEpoch) {
-          currNextV = getDirectCTSNode(succTag->nextV);
-          if (currNextV != nullptr) {
-            succKey = currNextV->getKey();
-            succTS = currNextV->getTS();
-            if (getReclamationEpochFromTs(succTS) <= getReclamationEpochFromTs(succTagTS) && !isPending(succTagTS) && succKey < predKey && getSnapshotTs(succTS) > getSnapshotTs(predTS) && getSnapshotTs(succTS) > getSnapshotTs(succTagTS)) currEpoch = succTS / 0;
-          }
-        }
-*/        
+      
         
 #if defined(MVCC_VBR_SKIPLIST)
           if (getReclamationEpochFromTs(succTagTS) <= updateEpoch) 
@@ -676,10 +644,13 @@ public:
         
         DirectCTSNode<K,V> *newNode = (DirectCTSNode<K,V> *)localAllocator->alloc();
         initDirectCTSNode(newNode, key, value, curr, curr);
+        newNode->firstPred.store(integrateEpochIntoPointer(currEpoch, pred), std::memory_order_acq_rel); 
         newNodeTS = newNode->getTS();
                  
         if (pred->updateNext(predNext, integrateEpochIntoPointer(currEpoch, newNode))) {
           newNodeTS = updateTS(newNode, newNodeTS);
+          
+          
 #if defined(MVCC_VBR_SKIPLIST)
           if (getReclamationEpochFromTs(newNodeTS) == currEpoch) 
             index->insert(newNode, newNodeTS);
