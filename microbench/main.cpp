@@ -422,12 +422,6 @@ void *thread_timed(void *_id) {
             GSTATS_TIMER_RESET(tid, timer_latency);
             if (INSERT_AND_CHECK_SUCCESS) {
                 GSTATS_ADD(tid, key_checksum, key);
-#ifdef USE_DEBUGCOUNTERS
-                glob.keysum->add(tid, key);
-                GET_COUNTERS->insertSuccess->inc(tid);
-            } else {
-                GET_COUNTERS->insertFail->inc(tid);
-#endif
             }
             GSTATS_TIMER_APPEND_ELAPSED(tid, timer_latency, latency_updates);
             GSTATS_ADD(tid, num_updates, 1);
@@ -435,12 +429,6 @@ void *thread_timed(void *_id) {
             GSTATS_TIMER_RESET(tid, timer_latency);
             if (DELETE_AND_CHECK_SUCCESS) {
                 GSTATS_ADD(tid, key_checksum, -key);
-#ifdef USE_DEBUGCOUNTERS
-                glob.keysum->add(tid, -key);
-                GET_COUNTERS->eraseSuccess->inc(tid);
-            } else {
-                GET_COUNTERS->eraseFail->inc(tid);
-#endif
             }
             GSTATS_TIMER_APPEND_ELAPSED(tid, timer_latency, latency_updates);
             GSTATS_ADD(tid, num_updates, 1);
@@ -458,11 +446,6 @@ void *thread_timed(void *_id) {
             if (RQ_AND_CHECK_SUCCESS(rqcnt)) {  // prevent rqResultKeys and count from
                 // being optimized out
                 garbage += RQ_GARBAGE(rqcnt);
-#ifdef USE_DEBUGCOUNTERS
-                GET_COUNTERS->rqSuccess->inc(tid);
-            } else {
-                GET_COUNTERS->rqFail->inc(tid);
-#endif
             }
             GSTATS_TIMER_APPEND_ELAPSED(tid, timer_latency, latency_rqs);
             GSTATS_ADD(tid, num_rq, 1);
@@ -470,11 +453,6 @@ void *thread_timed(void *_id) {
         } else {
             GSTATS_TIMER_RESET(tid, timer_latency);
             if (FIND_AND_CHECK_SUCCESS) {
-#ifdef USE_DEBUGCOUNTERS
-                GET_COUNTERS->findSuccess->inc(tid);
-            } else {
-                GET_COUNTERS->findFail->inc(tid);
-#endif
             }
             GSTATS_TIMER_APPEND_ELAPSED(tid, timer_latency, latency_searches);
             GSTATS_ADD(tid, num_searches, 1);
