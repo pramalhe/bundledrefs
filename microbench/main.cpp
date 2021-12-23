@@ -415,6 +415,7 @@ void *thread_timed(void *_id) {
         }
 
 //#define ENABLE_STRESS_TEST_ABC
+//#define ENABLE_STRESS_TEST_MVCC_RANDOM
 #if defined ENABLE_STRESS_TEST_ABC
         int udA = 0 + tid*32;
         int udB = 1 + tid*32;
@@ -441,6 +442,23 @@ void *thread_timed(void *_id) {
         if (ds->ERASE_FUNC(tid, udA) == ds->NO_VALUE) assert(false);
         if (ds->ERASE_FUNC(tid, udB) == ds->NO_VALUE) assert(false);
         if (ds->ERASE_FUNC(tid, udC) == ds->NO_VALUE) assert(false);
+
+#elif defined ENABLE_STRESS_TEST_MVCC_RANDOM
+        int key = rng->nextNatural(MAXKEY);
+        double op = rng->nextNatural(100000000) / 1000000.;
+        if (tid == 0) {
+            /* One thread does range queries */
+            int rqcnt = ds->RQ_FUNC(tid, 1, MAXKEY - 1, rqResultKeys, (VALUE_TYPE *)rqResultValues);
+            assert(rqcnt < TOTAL_THREADS);
+            //printf("Did range query. Found %d keys\n", rqcnt);
+            //for (int ik = 0; ik < rqcnt; ik++) printf("%lld, ", rqResultKeys[ik]);
+            //printf("\n");
+        } else {
+            /* All other threads do insertions and removals */
+            ds->INSERT_FUNC(tid, key, key);
+            ds->FIND_FUNC(tid, key);
+            ds->ERASE_FUNC(tid, key);
+        }
 
 #else
 
