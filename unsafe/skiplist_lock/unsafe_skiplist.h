@@ -19,7 +19,7 @@ using namespace std;
 #ifdef SKIPLIST_DEBUGGING_FLATTEN_MAX_LEVEL
 #define SKIPLIST_MAX_LEVEL (1)
 #else
-#define SKIPLIST_MAX_LEVEL (20)
+#define SKIPLIST_MAX_LEVEL (18)
 #endif
 
 /////////////////////////////////////////////////////////

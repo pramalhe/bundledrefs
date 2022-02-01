@@ -494,7 +494,7 @@ using namespace bundle_bst_ns;
 #define PRINT_OBJ_SIZES                                          \
   cout << "sizes: node=" << (sizeof(Node<test_type, test_type>)) \
        << " descriptor=" << (sizeof(SCXRecord<test_type, test_type>)) << endl;
-
+/*--------------------------------------------------------------------------*/
 #elif defined(UNSAFE_LIST)
 #include "record_manager.h"
 #include "unsafe_lazylist_impl.h"
@@ -522,7 +522,7 @@ using namespace bundle_bst_ns;
 
 #define PRINT_OBJ_SIZES \
   cout << "sizes: node=" << (sizeof(node_t<test_type, test_type>)) << endl;
-
+/*--------------------------------------------------------------------------*/
 #elif defined(UNSAFE_SKIPLIST)
 #include "record_manager.h"
 #include "unsafe_skiplist_impl.h"
@@ -549,7 +549,7 @@ using namespace bundle_bst_ns;
 #define BUNDLE_OBJ_SIZE (sizeof(Bundle<node_t<test_type, test_type>>))
 #define PRINT_OBJ_SIZES \
   cout << "sizes: node=" << (sizeof(node_t<test_type, test_type>)) << endl
-
+/*--------------------------------------------------------------------------*/
 #elif defined(UNSAFE_CITRUS)
 #include "record_manager.h"
 #include "unsafe_citrus_impl.h"
@@ -578,7 +578,7 @@ using namespace bundle_bst_ns;
 
 #define PRINT_OBJ_SIZES \
   cout << "sizes: node=" << (sizeof(node_t<test_type, test_type>)) << endl;
-
+/*--------------------------------------------------------------------------*/
 #elif defined(VCASBST)
 #include "record_manager.h"
 #include "vcas_bst_impl.h"
@@ -826,11 +826,11 @@ using namespace vcas_lazylist;
 /*--------------------------------------------------------------------------*/ 
 #elif defined(VBR_UNSAFE_LIST)
 #include "record_manager.h"
-#include "unsafe_vbr_list.h"
+#include "mvccvbr_unsafe_list.h"
 //using namespace mvcc_vbr;
 
-#define DS_DECLARATION unsafe_vbr_list<test_type, test_type, MEMMGMT_T>
-#define MEMMGMT_T record_manager<RECLAIM, ALLOC, POOL, UnsafeVBRNode<test_type, test_type>>
+#define DS_DECLARATION mvccvbr_unsafe_list<test_type, test_type, MEMMGMT_T>
+#define MEMMGMT_T record_manager<RECLAIM, ALLOC, POOL, DirectCTSNode<test_type, test_type>>
 #define DS_CONSTRUCTOR new DS_DECLARATION(TOTAL_THREADS, KEY_MIN, KEY_MAX, NO_VALUE)
 
 #define INSERT_AND_CHECK_SUCCESS ds->INSERT_FUNC(tid, key, VALUE) == ds->NO_VALUE
@@ -842,7 +842,7 @@ using namespace vcas_lazylist;
 #define DEINIT_THREAD(tid) ds->deinitThread(tid);
 #define INIT_ALL
 #define DEINIT_ALL
-#define PRINT_OBJ_SIZES cout << "sizes: node=" << (sizeof(UnsafeVBRNode<test_type, test_type>)) << endl;
+#define PRINT_OBJ_SIZES cout << "sizes: node=" << (sizeof(DirectCTSNode<test_type, test_type>)) << endl;
 /*--------------------------------------------------------------------------*/ 
 #elif defined(MVCC_VBR_LIST)
 #include "record_manager.h"

@@ -445,11 +445,18 @@ void *thread_timed(void *_id) {
 
 #elif defined ENABLE_STRESS_TEST_MVCC_RANDOM
         int key = rng->nextNatural(MAXKEY);
-        double op = rng->nextNatural(100000000) / 1000000.;
-        if (tid == 0) {
+        //double op = rng->nextNatural(100000000) / 1000000.;
+        if (tid == 2) {
             /* One thread does range queries */
-            int rqcnt = ds->RQ_FUNC(tid, 1, MAXKEY - 1, rqResultKeys, (VALUE_TYPE *)rqResultValues);
-            assert(rqcnt < TOTAL_THREADS);
+            int rqcnt;
+            unsigned _key = rng->nextNatural() % max(1, MAXKEY - RQSIZE);
+            key = (int)_key;
+            if (RQ_AND_CHECK_SUCCESS(rqcnt)) {  // prevent rqResultKeys and count from
+                // being optimized out
+                assert(rqcnt < TOTAL_THREADS);
+            }
+            //RQ_AND_CHECK_SUCCESS(rqcnt);
+            //assert(rqcnt < TOTAL_THREADS);
             //printf("Did range query. Found %d keys\n", rqcnt);
             //for (int ik = 0; ik < rqcnt; ik++) printf("%lld, ", rqResultKeys[ik]);
             //printf("\n");

@@ -8,8 +8,8 @@
 //#include "Atomic.h"
 #include "LocalAllocator.h"
 
-#define INDEX_MAX_LEVEL (19)
-#define INDEX_FREQ 4
+#define INDEX_MAX_LEVEL (18)
+#define INDEX_FREQ 2
 
 __thread LocalAllocator *localIndexAllocator = nullptr;
 __thread unsigned int indexLevelSeed;

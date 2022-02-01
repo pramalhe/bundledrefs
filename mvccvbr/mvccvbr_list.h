@@ -2,8 +2,6 @@
 #define MVCCVBR_LIST_H_
 
 #pragma once
-#include <atomic>
-#include <iostream>
 #include "errors.h"
 #include "DirectCTSNode.h"
 #include "LocalAllocator.h"
@@ -23,6 +21,7 @@
 __thread LocalAllocator *localAllocator = nullptr;
 __thread uint64_t currEpoch = 0;
 __thread uint64_t currTreeEpoch = 0;
+__thread uint64_t rollbacks = 0;
 
 #define PADDING_BYTES 192
 #define PENDING_TS 1
@@ -44,6 +43,7 @@ private:
     volatile char padding0[PADDING_BYTES];
     std::atomic<uint64_t> tsEpoch;
     volatile char padding1[PADDING_BYTES];
+    std::atomic<uint64_t> totalRollbacks;
     
 
     //nodeptr new_node(const int tid, const K& key, const V& val, nodeptr next);
@@ -170,6 +170,9 @@ private:
     inline void initDirectCTSNode(DirectCTSNode<K,V> *node, K key, V value, DirectCTSNode<K,V> *next, DirectCTSNode<K,V> *nextV) {
       readGlobalReclamationEpoch();
       uint64_t shiftedReclamationEpoch = (currEpoch << SNAPSHOT_EPOCH_BITS);
+      uint64_t prevTS = (node->ts.load(std::memory_order_acq_rel)) & TS_MASK;
+      if (prevTS == getTsEpoch())
+        incrementTsEpoch(prevTS);
       uint64_t initTS = (shiftedReclamationEpoch | PENDING_MASK);
       node->ts.store(initTS, std::memory_order_acq_rel);
       node->next.store(integrateEpochIntoPointer(currEpoch, next), std::memory_order_acq_rel);
@@ -197,6 +200,7 @@ public:
         initThread(0);
         
         tsEpoch = 2;
+        totalRollbacks = 0;
         
         DirectCTSNode<K,V> *tail = (DirectCTSNode<K,V> *)localAllocator->alloc();
         initDirectCTSNode(tail, KEY_MAX, NO_VALUE, nullptr, nullptr);
@@ -220,6 +224,7 @@ public:
       cout << "TS epoch = " << getTsEpoch() << endl;
       cout << "Reclamation epoch = " << getReclamationEpoch() << endl;
       cout << "Num caches = " << globalAllocator->getNumCaches() << endl;
+      cout << "Total rollbacks = " << totalRollbacks << endl;
       
 #if defined(MVCC_VBR_SKIPLIST) 
       cout << "IndexNode size = " << index->getNodeSize() << endl;
@@ -720,7 +725,7 @@ public:
  	    DirectCTSNode<K,V> *pred, *curr;
   
       minEpoch = getTsEpoch();
-      backoff(1000);
+      //backoff(1000);
 
       currKey = lo;
           
@@ -728,21 +733,25 @@ public:
           
         count = 0;
         
-        rangeQueryEpoch = getTsEpoch() - 2;
-        if (rangeQueryEpoch < minEpoch) {
+        rangeQueryEpoch = getTsEpoch() - 2;        
+        
+        curr = find(currKey, &pred, &predVersion, &tmpKey);
+        
+        if (getTsEpoch() == minEpoch) {
           incrementTsEpoch(minEpoch);
+          rollbacks++;
           currKey = lo;
           continue;
         }
-        
-        
-        curr = find(currKey, &pred, &predVersion, &tmpKey);
         
         predKey = pred->getKey();
         predTS = pred->getTS();
         
         if (isValidTS(predTS) == false) {
           currKey = lo;
+          if (rangeQueryEpoch == getTsEpoch() - 2)
+            incrementTsEpoch(rangeQueryEpoch + 2);
+          rollbacks++;
           continue;
         }
         
@@ -756,6 +765,9 @@ public:
         
         if (curr == nullptr) {
           currKey = lo;
+          if (rangeQueryEpoch == getTsEpoch() - 2)
+            incrementTsEpoch(rangeQueryEpoch + 2);
+          rollbacks++;
           continue;
         } 
         
@@ -763,6 +775,9 @@ public:
         
         if (pred->getTS() != predTS || currTS != outputExpTS) {
           currKey = lo;
+          if (rangeQueryEpoch == getTsEpoch() - 2)
+            incrementTsEpoch(rangeQueryEpoch + 2);
+          rollbacks++;
           continue;
         }
         
@@ -777,6 +792,9 @@ public:
         
         if (predTS != pred->getTS()) {
           currKey = lo;
+          if (rangeQueryEpoch == getTsEpoch() - 2)
+            incrementTsEpoch(rangeQueryEpoch + 2);
+          rollbacks++;
           continue;
         }
         
@@ -810,6 +828,9 @@ public:
         if (curr == nullptr || pred->getTS() != predTS || currTS != outputExpTS) {
 
           currKey = lo;
+          if (rangeQueryEpoch == getTsEpoch() - 2)
+            incrementTsEpoch(rangeQueryEpoch + 2);
+          rollbacks++;
           continue;
         }
         
@@ -845,6 +866,9 @@ public:
         if (curr == nullptr || pred->getTS() != predTS || currTS != outputExpTS) {
 
           currKey = lo;
+          if (rangeQueryEpoch == getTsEpoch() - 2)
+            incrementTsEpoch(rangeQueryEpoch + 2);
+          rollbacks++;
           continue;
         }
        
@@ -863,6 +887,7 @@ public:
       if (localAllocator == nullptr || localAllocator->getGlobalAllocator() != globalAllocator)
         localAllocator = new LocalAllocator(globalAllocator, tid);
       currEpoch = 0;
+      rollbacks = 0;
 #if defined(MVCC_VBR_SKIPLIST)
       index->initThread(tid);
 #elif defined(MVCC_VBR_TREE)
@@ -873,6 +898,7 @@ public:
 
     void deinitThread(const int tid) {
       localAllocator->returnAllocCaches();
+      totalRollbacks.fetch_add(rollbacks);
       
 #if defined(MVCC_VBR_SKIPLIST)
       index->deinitThread(tid);

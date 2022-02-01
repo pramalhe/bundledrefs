@@ -174,11 +174,11 @@ citrus.rq_lockfree:
 #citrus.rq_vcas:
 #	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DVCAS_CITRUS -DRQ_VCAS $(pinning) $(thispath)main.cpp $(LDFLAGS)
 
-.PHONY: rlu lazylist.rq_rlu citrus.rq_rlu
-rlu: lazylist.rq_rlu citrus.rq_rlu
-lazylist.rq_rlu:
+.PHONY: RLU list.rq_RLU tree.rq_RLU
+RLU: list.rq_RLU tree.rq_RLU
+list.rq_RLU:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRLU_LIST $(pinning) $(thispath)main.cpp $(thispath)../rlu/rlu.cpp $(LDFLAGS)
-citrus.rq_rlu:
+tree.rq_RLU:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRLU_CITRUS $(pinning) $(thispath)main.cpp $(thispath)../rlu/rlu.cpp $(LDFLAGS)
 
 .PHONY: ubundle lazylist.rq_ubundle skiplistlock.rq_ubundle citrus.rq_ubundle 
@@ -216,31 +216,31 @@ citrus.rq_cbundle:
 #lflist.rq_lockfree:
 #	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DLFLIST -DRQ_LOCKFREE $(pinning) $(thispath)main.cpp $(LDFLAGS)
 
-.PHONY: lbundle skiplist.rq_lbundle tree.rq_lbundle list.rq_lbundle
-lbundle: skiplist.rq_lbundle tree.rq_lbundle list.rq_lbundle
-list.rq_lbundle:
+.PHONY: BRF skiplist.rq_BRF tree.rq_BRF list.rq_BRF
+BRF: skiplist.rq_BRF tree.rq_BRF list.rq_BRF
+list.rq_BRF:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRQ_BUNDLE -DBUNDLE_LINKED_BUNDLE -DBUNDLE_LIST $(pinning) $(thispath)main.cpp $(LDFLAGS)
-skiplist.rq_lbundle:
+skiplist.rq_BRF:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRQ_BUNDLE -DBUNDLE_LINKED_BUNDLE -DBUNDLE_SKIPLIST $(pinning) $(thispath)main.cpp $(LDFLAGS)
-tree.rq_lbundle:
+tree.rq_BRF:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRQ_BUNDLE -DBUNDLE_LINKED_BUNDLE -DBUNDLE_CITRUS $(pinning) $(thispath)main.cpp $(LDFLAGS)
 
-.PHONY: lockfree skiplist.rq_lockfree tree.rq_lockfree list.rq_lockfree
-lockfree: skiplist.rq_lockfree tree.rq_lockfree list.rq_lockfree
-list.rq_lockfree:
+.PHONY: EBRQ skiplist.rq_EBRQ tree.rq_EBRQ list.rq_EBRQ
+EBRQ: skiplist.rq_EBRQ tree.rq_EBRQ list.rq_EBRQ
+list.rq_EBRQ:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DLFLIST -DRQ_LOCKFREE $(pinning) $(thispath)main.cpp $(LDFLAGS)
-skiplist.rq_lockfree:
+skiplist.rq_EBRQ:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DSKIPLISTLOCK -DRQ_LOCKFREE $(pinning) $(thispath)main.cpp $(LDFLAGS)
-tree.rq_lockfree:
+tree.rq_EBRQ:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DBST -DRQ_LOCKFREE $(pinning) $(thispath)main.cpp $(LDFLAGS)
  
-.PHONY: unsafe skiplist.rq_unsafe tree.rq_unsafe list.rq_unsafe
-unsafe: skiplist.rq_unsafe tree.rq_unsafe list.rq_unsafe
-list.rq_unsafe:
+.PHONY: UNSAFE skiplist.rq_UNSAFE tree.rq_UNSAFE list.rq_UNSAFE
+UNSAFE: skiplist.rq_UNSAFE tree.rq_UNSAFE list.rq_UNSAFE
+list.rq_UNSAFE:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DUNSAFE_LIST $(pinning) $(thispath)main.cpp $(LDFLAGS)
-skiplist.rq_unsafe:
+skiplist.rq_UNSAFE:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DUNSAFE_SKIPLIST $(pinning) $(thispath)main.cpp $(LDFLAGS)
-tree.rq_unsafe:
+tree.rq_UNSAFE:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DUNSAFE_CITRUS $(pinning) $(thispath)main.cpp $(LDFLAGS)
  
 .PHONY: vbrunsafe skiplist.rq_vbrunsafe tree.rq_vbrunsafe list.rq_vbrunsafe
@@ -249,22 +249,22 @@ list.rq_vbrunsafe:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DVBR_UNSAFE_LIST $(pinning) $(thispath)main.cpp $(LDFLAGS)
 
 
-.PHONY: mvccvbr skiplist.rq_mvccvbr tree.rq_mvccvbr list.rq_mvccvbr
-mvccvbr: skiplist.rq_mvccvbr tree.rq_mvccvbr list.rq_mvccvbr
-skiplist.rq_mvccvbr:
+.PHONY: VBRQ skiplist.rq_VBRQ tree.rq_VBRQ list.rq_VBRQ
+VBRQ: skiplist.rq_VBRQ tree.rq_VBRQ list.rq_VBRQ
+skiplist.rq_VBRQ:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DMVCC_VBR_SKIPLIST $(pinning) $(thispath)main.cpp $(LDFLAGS)
-tree.rq_mvccvbr:
+tree.rq_VBRQ:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DMVCC_VBR_TREE $(pinning) $(thispath)main.cpp $(LDFLAGS)
-list.rq_mvccvbr:
+list.rq_VBRQ:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DMVCC_VBR_LIST $(pinning) $(thispath)main.cpp $(LDFLAGS)
  
-.PHONY: vcas tree.rq_vcas skiplist.rq_vcas list.rq_vcas
-vcas: tree.rq_vcas skiplist.rq_vcas list.rq_vcas
-tree.rq_vcas:
+.PHONY: CTS tree.rq_CTS skiplist.rq_CTS list.rq_CTS
+CTS: tree.rq_CTS skiplist.rq_CTS list.rq_CTS
+tree.rq_CTS:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DVCASBST -DRQ_VCAS $(pinning) $(thispath)main.cpp $(LDFLAGS)
-skiplist.rq_vcas:
+skiplist.rq_CTS:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DVCAS_LOCKFREE_SKIPLIST -DRQ_VCAS $(pinning) $(thispath)main.cpp $(LDFLAGS)
-list.rq_vcas:
+list.rq_CTS:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DVCAS_LOCKFREE_LIST -DRQ_VCAS $(pinning) $(thispath)main.cpp $(LDFLAGS)
 
 .PHONY: clean

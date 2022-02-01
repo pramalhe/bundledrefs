@@ -15,7 +15,8 @@ fi
 
 check_ds_technique() {
     ## args: ds alg
-    if [ "$2" != "vbrunsafe" ] && [ "$2" != "unsafe" ] && [ "$2" != "lockfree" ] && [ "$2" != "vcas" ] && [ "$2" != "mvccvbr" ] && [ "$2" != "lbundle" ] ; then return 1 ; fi
+    if [ "$2" != "UNSAFE" ] && [ "$2" != "EBRQ" ] && [ "$2" != "CTS" ] && [ "$2" != "VBRQ" ] && [ "$2" != "BRF" ] ; then return 1 ; fi
+
     return 0
 }
 export -f check_ds_technique
@@ -25,6 +26,7 @@ check_ds_size() {
     if [ "$2" == "1000000" ] && [ "$1" != "tree" ]  && [ "$1" != "skiplist" ] ; then return 1 ; fi
     if [ "$2" == "100000" ] && [ "$1" != "tree" ] && [ "$1" != "skiplist" ] ; then return 1 ; fi
     if [ "$2" == "10000" ] && [ "$1" != "list" ] ; then return 1 ; fi
+    if [ "$2" == "1000" ] && [ "$1" != "list" ] ; then return 1 ; fi
     return 0
 }
 export -f check_ds_size
